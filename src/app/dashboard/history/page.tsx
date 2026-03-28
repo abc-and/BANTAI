@@ -150,7 +150,7 @@ export default function HistoryCompliancePage() {
         <div className={`flex flex-col gap-6 w-full max-w-7xl mx-auto p-4 sm:p-6 pb-12 print:p-0 relative transition-colors duration-300 ${t("bg-[#0f172a]", "bg-slate-50")}`}>
 
             {/* 1. Header Hero Card */}
-            <div className={`rounded-[2rem] p-8 sm:p-10 shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden transition-all duration-300 ${t("bg-linear-to-br from-indigo-900 to-blue-900 shadow-indigo-900/40", "bg-linear-to-br from-indigo-600 to-blue-700 shadow-blue-500/20")}`}>
+            <div className={`rounded-4xl p-8 sm:p-10 shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden transition-all duration-300 ${t("bg-linear-to-br from-indigo-900 to-blue-900 shadow-indigo-900/40", "bg-linear-to-br from-indigo-600 to-blue-700 shadow-blue-500/20")}`}>
                 <div className="absolute inset-x-0 top-0 h-40 bg-white/10 blur-3xl rounded-full translate-y-[-50%] pointer-events-none"></div>
                 <div className="absolute right-0 bottom-0 w-64 h-64 bg-blue-400/20 blur-3xl rounded-full translate-x-1/3 translate-y-1/3 pointer-events-none"></div>
 
@@ -180,7 +180,7 @@ export default function HistoryCompliancePage() {
                     { icon: <Users className="w-7 h-7" />, value: statistics.overcapacity, label: "Overcapacity Cases", color: "rose", accent: "text-rose-600", bg: t("bg-rose-900/20 border-rose-900/30", "bg-rose-50 border-rose-100") },
                     { icon: <Gauge className="w-7 h-7" />, value: statistics.overspeeding, label: "Overspeeding Cases", color: "cyan", accent: "text-cyan-600", bg: t("bg-cyan-900/20 border-cyan-900/30", "bg-cyan-50 border-cyan-100") }
                 ].map((stat, i) => (
-                    <div key={i} className={`rounded-[2rem] p-6 border shadow-sm flex items-center gap-5 hover:shadow-md transition-all duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
+                    <div key={i} className={`rounded-4xl p-6 border shadow-sm flex items-center gap-5 hover:shadow-md transition-all duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${stat.bg} ${stat.accent}`}>
                             {stat.icon}
                         </div>
@@ -193,7 +193,7 @@ export default function HistoryCompliancePage() {
             </div>
 
             {/* 3. Filters & Actions Bar */}
-            <div className={`border rounded-[2rem] p-2 shadow-sm flex flex-col lg:flex-row gap-2 print:hidden z-20 sticky top-4 transition-all duration-300 ${t("bg-[#1e293b] border-slate-700 shadow-indigo-900/10", "bg-white border-slate-200 shadow-slate-200/50")}`}>
+            <div className={`border rounded-4xl p-2 shadow-sm flex flex-col lg:flex-row gap-2 print:hidden z-20 sticky top-4 transition-all duration-300 ${t("bg-[#1e293b] border-slate-700 shadow-indigo-900/10", "bg-white border-slate-200 shadow-slate-200/50")}`}>
                 <div className="flex-1 relative flex items-center">
                     <div className={`absolute left-4 p-2 rounded-xl text-slate-400 ${t("bg-slate-800", "bg-slate-100")}`}>
                         <Search className="w-4 h-4" />
@@ -258,7 +258,7 @@ export default function HistoryCompliancePage() {
             {/* 4. History List */}
             <div className="space-y-4">
                 {filteredViolations.length === 0 ? (
-                    <div className={`flex flex-col items-center justify-center py-24 print:hidden border rounded-[2rem] shadow-sm transition-colors duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
+                    <div className={`flex flex-col items-center justify-center py-24 print:hidden border rounded-4xl shadow-sm transition-colors duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
                         <div className={`p-6 rounded-3xl mb-5 shadow-inner ${t("bg-slate-800 text-slate-500", "bg-slate-50 text-slate-400")}`}>
                             <Inbox className="w-12 h-12" />
                         </div>
@@ -270,7 +270,7 @@ export default function HistoryCompliancePage() {
                         <div key={v.id} className={`border rounded-[2.5rem] p-3 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row gap-4 print:border-slate-300 print:shadow-none print:break-inside-avoid items-center group duration-300 ${t("bg-[#1e293b] border-slate-700 hover:border-indigo-500/50 hover:bg-[#243147]", "bg-white border-slate-200 hover:bg-slate-50")}`}>
 
                             {/* Icon Status Indicator */}
-                            <div className={`w-20 h-20 rounded-[2rem] flex items-center justify-center shrink-0 border transition-all duration-300 ${v.status === 'RESOLVED' ? t('bg-blue-900/30 text-blue-400 border-blue-800/50', 'bg-blue-50 text-blue-500 border-blue-100/50') : t('bg-slate-800 text-slate-500 border-slate-700', 'bg-slate-50 text-slate-400 border-slate-100')}`}>
+                            <div className={`w-20 h-20 rounded-4xl flex items-center justify-center shrink-0 border transition-all duration-300 ${v.status === 'RESOLVED' ? t('bg-blue-900/30 text-blue-400 border-blue-800/50', 'bg-blue-50 text-blue-500 border-blue-100/50') : t('bg-slate-800 text-slate-500 border-slate-700', 'bg-slate-50 text-slate-400 border-slate-100')}`}>
                                 {v.status === 'RESOLVED' ? <CheckCircle className="w-8 h-8" strokeWidth={2.5} /> : <XCircle className="w-8 h-8" strokeWidth={2.5} />}
                             </div>
 
@@ -323,7 +323,7 @@ export default function HistoryCompliancePage() {
                             <div className={`hidden md:flex flex-col justify-center pr-3 border-l pl-4 print:hidden transition-colors duration-300 ${t("border-slate-800", "border-slate-50")}`}>
                                 <button
                                     onClick={() => setSelectedViolation(v)}
-                                    className={`w-14 h-14 flex items-center justify-center rounded-[1.5rem] transition-all duration-300 group-hover:scale-105 active:scale-95 ${t("bg-indigo-900/40 text-indigo-400 hover:bg-indigo-600 hover:text-white hover:shadow-indigo-500/30", "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white hover:shadow-blue-500/30")}`}
+                                    className={`w-14 h-14 flex items-center justify-center rounded-3xl transition-all duration-300 group-hover:scale-105 active:scale-95 ${t("bg-indigo-900/40 text-indigo-400 hover:bg-indigo-600 hover:text-white hover:shadow-indigo-500/30", "bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white hover:shadow-blue-500/30")}`}
                                     title="View Record Details"
                                 >
                                     <Eye className="w-6 h-6" />
@@ -333,7 +333,7 @@ export default function HistoryCompliancePage() {
                             {/* Mobile action button */}
                             <button
                                 onClick={() => setSelectedViolation(v)}
-                                className={`md:hidden w-full font-bold p-4 rounded-b-[2rem] rounded-t-lg transition-colors border-t mt-2 flex items-center justify-center gap-2 ${t("bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700", "bg-slate-50 border-slate-100 text-slate-700 hover:bg-blue-50")}`}
+                                className={`md:hidden w-full font-bold p-4 rounded-b-4xl rounded-t-lg transition-colors border-t mt-2 flex items-center justify-center gap-2 ${t("bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700", "bg-slate-50 border-slate-100 text-slate-700 hover:bg-blue-50")}`}
                             >
                                 <Eye className="w-5 h-5" />
                                 View Full Record
@@ -346,7 +346,7 @@ export default function HistoryCompliancePage() {
             {/* Modals & Dialogs */}
             {isRetentionModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden animate-in fade-in duration-300">
-                    <div className={`rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${t("bg-[#1e293b] text-white", "bg-white text-slate-800")}`}>
+                    <div className={`rounded-4xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200 ${t("bg-[#1e293b] text-white", "bg-white text-slate-800")}`}>
                         <div className={`p-8 border-b flex items-center gap-4 transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700", "bg-slate-50/50 border-slate-100")}`}>
                             <div className={`p-3 rounded-2xl shadow-inner border ${t("bg-amber-900/20 text-amber-500 border-amber-900/30", "bg-amber-100 text-amber-600 border-amber-200")}`}>
                                 <Settings className="w-6 h-6" />
@@ -398,7 +398,7 @@ export default function HistoryCompliancePage() {
 
             {selectedViolation && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 print:hidden animate-in fade-in duration-300" onClick={() => setSelectedViolation(null)}>
-                    <div className={`rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-colors ${t("bg-[#1e293b] text-white", "bg-white text-slate-800")}`} onClick={(e) => e.stopPropagation()}>
+                    <div className={`rounded-4xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-colors ${t("bg-[#1e293b] text-white", "bg-white text-slate-800")}`} onClick={(e) => e.stopPropagation()}>
                         <div className={`p-8 border-b flex items-center justify-between transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700", "bg-slate-50/50 border-slate-100")}`}>
                             <div className="flex items-center gap-4">
                                 {selectedViolation.status === 'RESOLVED' ? (

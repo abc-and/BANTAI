@@ -181,7 +181,7 @@ function QuickViewModal({
     onDismiss: (id: string) => void;
 }) {
     return (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-2000 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className={`rounded-2xl shadow-2xl w-[420px] p-6 relative transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
                 <button
                     onClick={onClose}
@@ -255,7 +255,7 @@ function LogoutModal({
     onCancel: () => void;
 }) {
     return (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-2000 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className={`rounded-2xl shadow-2xl w-[360px] p-6 transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
                 <div className="flex justify-center mb-4">
                     <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
@@ -334,7 +334,7 @@ export default function AdminDashboard() {
 
             {/* ── AppBar ── */}
             <header className={`h-[72px] border-b flex items-center justify-between px-6 shrink-0 shadow-sm transition-colors duration-300 ${t(isDark, "bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
-                <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-400 rounded-full text-white shadow">
+                <div className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-blue-600 to-blue-400 rounded-full text-white shadow">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
@@ -345,7 +345,7 @@ export default function AdminDashboard() {
                     onClick={() => setShowLogoutModal(true)}
                     className={`flex items-center gap-3 px-3 py-1.5 border rounded-full cursor-pointer transition ${t(isDark, "bg-[#334155] border-slate-600 hover:bg-[#475569]", "bg-slate-50 border-slate-200 hover:bg-slate-100")}`}
                 >
-                    <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-blue-500 rounded-full flex items-center justify-center text-white">
+                    <div className="w-9 h-9 bg-linear-to-r from-blue-600 to-blue-500 rounded-full flex items-center justify-center text-white">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
@@ -423,7 +423,7 @@ export default function AdminDashboard() {
                 <div className="flex-1 flex overflow-hidden">
 
                     {/* Map */}
-                    <div className="flex-[7] p-6">
+                    <div className="flex-7 p-6">
                         <div className="relative h-full rounded-2xl shadow-lg overflow-hidden">
                             <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }} className="z-0">
                                 <TileLayer
@@ -441,7 +441,7 @@ export default function AdminDashboard() {
                             </MapContainer>
 
                             {/* Map Legend */}
-                            <div className={`absolute bottom-5 left-5 rounded-xl shadow-md p-4 z-[1000] transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
+                            <div className={`absolute bottom-5 left-5 rounded-xl shadow-md p-4 z-1000 transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
                                 <p className={`font-bold text-sm mb-3 ${t(isDark, "text-white", "text-slate-800")}`}>Map Legend</p>
                                 <div className="flex flex-col gap-2">
                                     {[

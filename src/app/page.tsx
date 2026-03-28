@@ -8,7 +8,7 @@ export default function LandingPage() {
   const [logoError, setLogoError] = useState(false);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-blue-50 flex flex-col items-center justify-center px-6 overflow-hidden">
+    <main className="min-h-screen bg-linear-to-br from-white via-slate-50 to-blue-50 flex flex-col items-center justify-center px-6 overflow-hidden">
       <div className="text-center max-w-2xl">
         {/* Tagline */}
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-blue-100 bg-blue-50 text-blue-600 text-sm mb-6 animate-fade-in">
@@ -44,7 +44,7 @@ export default function LandingPage() {
         <div className="flex gap-4 justify-center">
           <Link
             href="/login"
-            className="px-8 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold transition-all duration-300 shadow-lg shadow-blue-500/30 hover:scale-105 active:scale-95"
+            className="px-8 py-3 rounded-xl bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold transition-all duration-300 shadow-lg shadow-blue-500/30 hover:scale-105 active:scale-95"
           >
             Get Started
           </Link>

@@ -377,7 +377,7 @@ function UserModal({ isDark, title, onClose, onSubmit, formData, setFormData }: 
     
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className={`rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
+          <div className={`rounded-4xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
             <div className={`p-8 border-b flex justify-between items-center transition-colors ${t("bg-slate-800/50 border-slate-700", "bg-slate-50 border-slate-100")}`}>
               <h2 className="text-xl font-black uppercase tracking-tight">{title}</h2>
               <button onClick={onClose} className={`p-2 rounded-xl transition-colors ${t("text-slate-400 hover:bg-slate-800 hover:text-white", "text-slate-400 hover:bg-slate-100 hover:text-slate-800")}`}>

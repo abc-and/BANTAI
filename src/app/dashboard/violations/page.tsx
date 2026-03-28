@@ -540,7 +540,7 @@ function DetailsPanel({
     return (
         <div className={`w-[420px] shrink-0 border-l-2 flex flex-col shadow-2xl transition-all duration-300 ${t("bg-[#1e293b] border-slate-800", "bg-white border-slate-200")}`}>
             {/* Panel header */}
-            <div className={`bg-gradient-to-r ${headerBg} px-6 py-6 flex items-center gap-4 shadow-lg`}>
+            <div className={`bg-linear-to-r ${headerBg} px-6 py-6 flex items-center gap-4 shadow-lg`}>
                 <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-md border border-white/20 shadow-inner">
                     <svg className="w-7 h-7 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={isOverload ? "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1" : "M13 10V3L4 14h7v7l9-11h-7z"} />
@@ -580,7 +580,7 @@ function DetailsPanel({
                                 {isBadge ? (
                                     <span className={`px-2 py-0.5 rounded-md text-xs font-black border transition-colors ${t("bg-indigo-900/30 text-indigo-400 border-indigo-800/50", "bg-blue-900/10 text-blue-900 border-blue-900/20")}`}>{value}</span>
                                 ) : (
-                                    <div className={`text-sm font-bold break-words transition-colors ${isMono ? "font-mono tracking-wider" : ""} ${t("text-slate-200", "text-slate-800")}`}>{value}</div>
+                                    <div className={`text-sm font-bold wrap-break-word transition-colors ${isMono ? "font-mono tracking-wider" : ""} ${t("text-slate-200", "text-slate-800")}`}>{value}</div>
                                 )}
                             </div>
                         </div>
@@ -595,7 +595,7 @@ function DetailsPanel({
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={isOverload ? "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1" : "M13 10V3L4 14h7v7l9-11h-7z"} />
                             </svg>
                         </div>
-                        <span className={`text-xs font-black tracking-[0.1em] uppercase ${accentText}`}>
+                        <span className={`text-xs font-black tracking-widest uppercase ${accentText}`}>
                             {isOverload ? "Infraction Snapshot" : "Detection Log"}
                         </span>
                     </div>

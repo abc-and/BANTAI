@@ -83,7 +83,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
     return (
         <>
             {showLogout && (
-                <div className="fixed inset-0 z-[2000] flex items-center justify-center">
+                <div className="fixed inset-0 z-2000 flex items-center justify-center">
                     <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowLogout(false)} />
                     {/* MODAL: bg-card text-foreground border-border-custom */}
                     <div className="relative z-10 w-80 rounded-2xl bg-card border border-border-custom p-6 shadow-2xl">
@@ -104,7 +104,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
 
             <aside
                 // ASIDE: bg-sidebar border-border-custom
-                className={`${collapsed ? "w-[68px]" : "w-60"} flex-shrink-0 h-screen flex flex-col border-r border-border-custom bg-sidebar transition-all duration-300 ease-in-out relative z-20 shadow-sm`}
+                className={`${collapsed ? "w-[68px]" : "w-60"} shrink-0 h-screen flex flex-col border-r border-border-custom bg-sidebar transition-all duration-300 ease-in-out relative z-20 shadow-sm`}
             >
                 {/* Logo Section: bg-sidebar border-border-custom */}
                 <div className="relative h-16 border-b border-border-custom bg-sidebar z-50">
@@ -148,7 +148,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
 
                 {/* Collapse toggle: bg-card border-border-custom */}
                 <button onClick={onToggle}
-                    className="absolute -right-3.5 top-[4.5rem] bg-card border border-border-custom text-foreground/40 hover:text-blue-600 rounded-full p-1.5 shadow-sm hover:shadow transition-all"
+                    className="absolute -right-3.5 top-18 bg-card border border-border-custom text-foreground/40 hover:text-blue-600 rounded-full p-1.5 shadow-sm hover:shadow transition-all"
                 >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={collapsed ? "M9 5l7 7-7 7" : "M15 19l-7-7 7-7"} />
@@ -192,7 +192,7 @@ export default function Sidebar({ collapsed, onToggle }: { collapsed: boolean; o
                         </div>
                     ) : (
                         <div className="flex items-center gap-3 px-2 py-2 rounded-xl">
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold flex-shrink-0 bg-linear-to-br from-blue-500 to-indigo-600 shadow-sm">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0 bg-linear-to-br from-blue-500 to-indigo-600 shadow-sm">
                                 {user?.firstName?.[0]}{user?.lastName?.[0]}
                             </div>
                             <div className="flex-1 min-w-0">

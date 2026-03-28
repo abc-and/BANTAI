@@ -177,7 +177,7 @@ export default function ModernJeepneyRegistration() {
             <div className="flex-1 xl:max-w-xl">
                 <div className="bg-card border border-border-custom rounded-2xl p-6 shadow-sm sticky top-6">
                     <div className="flex items-center gap-4 mb-8">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${isEditing ? "bg-gradient-to-br from-amber-500 to-rose-500" : "bg-gradient-to-br from-blue-500 to-blue-700"}`}>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${isEditing ? "bg-linear-to-br from-amber-500 to-rose-500" : "bg-linear-to-br from-blue-500 to-blue-700"}`}>
                             {isEditing ? <Edit size={24} /> : <Bus size={24} />}
                         </div>
                         <div>
@@ -265,7 +265,7 @@ export default function ModernJeepneyRegistration() {
                     <div className="flex flex-col gap-4">
                         {filteredVehicles.map((vehicle) => (
                             <div key={vehicle.vehicleId} className="bg-card border border-border-custom rounded-xl p-4 shadow-sm flex items-start gap-5 hover:shadow-md transition-shadow">
-                                <button onClick={() => toggleStatus(vehicle.vehicleId)} className={`shrink-0 w-14 h-14 rounded-xl flex items-center justify-center text-white ${vehicle.status === "Active" ? "bg-gradient-to-br from-emerald-400 to-emerald-600" : "bg-gradient-to-br from-amber-400 to-amber-600"}`}>
+                                <button onClick={() => toggleStatus(vehicle.vehicleId)} className={`shrink-0 w-14 h-14 rounded-xl flex items-center justify-center text-white ${vehicle.status === "Active" ? "bg-linear-to-br from-emerald-400 to-emerald-600" : "bg-linear-to-br from-amber-400 to-amber-600"}`}>
                                     <Bus size={28} />
                                 </button>
                                 <div className="flex-1 min-w-0">

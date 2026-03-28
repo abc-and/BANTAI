@@ -42,7 +42,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-[#F9FAFB] overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/5 to-[#143054]/10 pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-br from-blue-600/5 to-[#143054]/10 pointer-events-none" />
 
       <div className="relative w-full max-w-[480px] p-5 z-10">
         <div className="bg-white rounded-[24px] shadow-2xl p-8 md:p-10">
@@ -52,7 +52,7 @@ export default function AdminLoginPage() {
               {!logoError ? (
                 <Image src="/bantai_logo.png" alt="Logo" width={120} height={120} priority onError={() => setLogoError(true)} />
               ) : (
-                <div className="w-[120px] h-[120px] bg-gradient-to-r from-blue-700 to-blue-500 rounded-full flex items-center justify-center text-white"><span className="material-icons text-6xl">smart_toy</span></div>
+                <div className="w-[120px] h-[120px] bg-linear-to-r from-blue-700 to-blue-500 rounded-full flex items-center justify-center text-white"><span className="material-icons text-6xl">smart_toy</span></div>
               )}
             </div>
 
