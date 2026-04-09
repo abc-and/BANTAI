@@ -5,26 +5,26 @@ import Sidebar from "@/components/Sidebar";
 import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const { user, loading } = useAuth();
-  const router = useRouter();
+    const [collapsed, setCollapsed] = useState(false);
+    const { user, loading } = useAuth();
+    const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && !user) router.push("/login");
-  }, [user, loading, router]);
+    useEffect(() => {
+        if (!loading && !user) router.push("/login");
+    }, [user, loading, router]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-[#060d1a] flex items-center justify-center">
-      <div className="text-slate-400 text-sm">Loading...</div>
-    </div>
-  );
+    if (loading) return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="text-slate-500 font-medium text-sm">Loading...</div>
+        </div>
+    );
 
-  if (!user) return null;
+    if (!user) return null;
 
-  return (
-    <div className="flex h-screen bg-[#060d1a] overflow-hidden">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
-      <main className="flex-1 overflow-y-auto p-6">{children}</main>
-    </div>
-  );
+    return (
+        <div className="flex h-screen bg-background overflow-hidden transition-colors duration-300">
+            <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+            <main className="flex-1 overflow-y-auto">{children}</main>
+        </div>
+    );
 }

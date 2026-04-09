@@ -1,78 +1,106 @@
+// app/admin/login/page.tsx
 "use client";
-import { useState } from "react";
-import { useAuth } from "@/context/AuthContext";
-import api from "@/lib/api";
 
-export default function LoginPage() {
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { useAuth } from '@/context/AuthContext';
+
+export default function AdminLoginPage() {
+  const router = useRouter();
   const { login } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [logoError, setLogoError] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const res = await api.post("/auth/login", form);
-      login(res.data.token, res.data.user);
-    } catch {
-      setError("Invalid email or password.");
-    } finally {
-      setLoading(false);
+    setIsLoading(true);
+    setError('');
+
+    // Matches your Flutter 2-second delay
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    if (username === 'admin' && password === 'bantai2026') {
+      login("mock-token", {
+          id: "1",
+          email: "admin@bantai.ai",
+          firstName: "Admin",
+          lastName: "User",
+          role: "ADMIN",
+          isActive: true,
+          createdAt: new Date().toISOString()
+      });
+    } else {
+      setIsLoading(false);
+      setError('Invalid username or password');
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a1628] to-[#081020] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-[#1a8fd1] flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-xl">B</span>
-          </div>
-          <h1 className="text-2xl font-bold text-white">Bantai</h1>
-          <p className="text-slate-400 text-sm mt-1">Sign in to your account</p>
-        </div>
+    <div className="relative min-h-screen flex items-center justify-center bg-[#F9FAFB] overflow-hidden">
+      <div className="absolute inset-0 bg-linear-to-br from-blue-600/5 to-[#143054]/10 pointer-events-none" />
 
-        <div className="bg-[#0b1a2e] border border-[rgba(26,143,209,0.15)] rounded-2xl p-8 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                {error}
+      <div className="relative w-full max-w-[480px] p-5 z-10">
+        <div className="bg-white rounded-[24px] shadow-2xl p-8 md:p-10">
+          <form onSubmit={handleLogin} className="flex flex-col items-center">
+
+            <div className="h-[130px] flex items-center justify-center mb-2">
+              {!logoError ? (
+                <Image src="/bantai_logo.png" alt="Logo" width={120} height={120} priority onError={() => setLogoError(true)} />
+              ) : (
+                <div className="w-[120px] h-[120px] bg-linear-to-r from-blue-700 to-blue-500 rounded-full flex items-center justify-center text-white"><span className="material-icons text-6xl">smart_toy</span></div>
+              )}
+            </div>
+
+            <h1 className="text-[#143054] text-3xl font-bold">Admin Access</h1>
+            <p className="text-gray-500 text-sm mt-1">Secure administration portal</p>
+
+            {error && <div className="mt-4 w-full p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg text-center font-medium">{error}</div>}
+
+            <div className="mt-8 w-full space-y-4">
+              <div className="relative">
+                {/* Made icon darker: text-gray-700 */}
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 material-icons">person_outline</span>
+                {/* Made text darker: text-gray-900 */}
+                <input type="text" placeholder="Username" disabled={isLoading} className="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-600 outline-none text-gray-900" value={username} onChange={(e) => setUsername(e.target.value)} required />
               </div>
-            )}
-            <div>
-              <label className="block text-sm text-slate-400 mb-1.5">Email</label>
-              <input
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-[#1a8fd1] transition-colors text-sm"
-                placeholder="you@example.com"
-              />
+
+              <div className="relative">
+                {/* Made icon darker: text-gray-700 */}
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 material-icons">lock_outline</span>
+                {/* Made text darker: text-gray-900 */}
+                <input type={isPasswordVisible ? 'text' : 'password'} placeholder="Password" disabled={isLoading} className="w-full pl-12 pr-12 py-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-600 outline-none text-gray-900" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-700"><span className="material-icons">{isPasswordVisible ? 'visibility_off' : 'visibility'}</span></button>
+              </div>
+
+              <button type="submit" disabled={isLoading} className="w-full h-[50px] bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold tracking-wider transition-all disabled:opacity-50">LOGIN TO ADMIN DASHBOARD</button>
+
+              <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-gray-700">
+                <span className="material-icons text-amber-500 text-[18px]">security</span>
+                <p className="text-[12px] font-medium">Restricted area. All access is logged.</p>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1.5">Password</label>
-              <input
-                type="password"
-                required
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-[#1a8fd1] transition-colors text-sm"
-                placeholder="••••••••"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-[#1a8fd1] hover:bg-[#146da3] disabled:opacity-60 text-white font-medium transition-all text-sm shadow-lg shadow-blue-900/30"
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
+
+            <footer className="mt-8 text-center text-gray-400 text-[10px]">
+              <p className="font-medium text-gray-500">© 2026 BANT.AI - MANDAUE CITY GOVERNMENT</p>
+              <p>Public Transport Regulation Office</p>
+            </footer>
           </form>
         </div>
       </div>
+
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-white p-8 rounded-2xl flex flex-col items-center w-[220px]">
+            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm font-semibold text-gray-800">Verifying...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
