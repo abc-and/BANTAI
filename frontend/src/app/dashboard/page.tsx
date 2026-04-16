@@ -1,5 +1,6 @@
+// app/dashboard/page.tsx
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -7,125 +8,251 @@ import { format } from "date-fns";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { Car, Bell, Calendar, Clock } from "lucide-react";
+import { 
+  Car, 
+  Calendar, 
+  Clock, 
+  Gauge, 
+  Weight, 
+  CheckCircle, 
+  XCircle,
+  AlertTriangle,
+  MapPin,
+  Navigation,
+  Search,
+  Filter,
+  X,
+  Layers,
+  Map as MapIcon,
+  Satellite,
+  Mountain,
+  Globe
+} from "lucide-react";
 
 // ─────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────
 type ViolationType = "overloading" | "overspeeding";
 type ViolationStatus = "unverified" | "verified" | "dismissed";
+type MapLayerType = "streets" | "satellite" | "terrain" | "dark";
 
 interface Violation {
-    id: string;
-    type: ViolationType;
-    status: ViolationStatus;
-    plateNumber: string;
-    location: string;
-    coordinates: [number, number];
-    timestamp: Date;
-    speed?: number;
-    capacity?: number;
-    imageUrl?: string;
+  id: string;
+  type: ViolationType;
+  status: ViolationStatus;
+  plateNumber: string;
+  location: string;
+  coordinates: [number, number];
+  timestamp: Date;
+  speed?: number;
+  capacity?: number;
+  imageUrl?: string;
 }
 
 // ─────────────────────────────────────────
 // SAMPLE DATA
 // ─────────────────────────────────────────
 const SAMPLE_VIOLATIONS: Violation[] = [
-    {
-        id: "v001",
-        type: "overspeeding",
-        status: "unverified",
-        plateNumber: "ABC 1234",
-        location: "Colon St, Cebu City",
-        coordinates: [10.2942, 123.9017],
-        timestamp: new Date(Date.now() - 1000 * 60 * 5),
-        speed: 87,
-    },
-    {
-        id: "v002",
-        type: "overloading",
-        status: "unverified",
-        plateNumber: "XYZ 5678",
-        location: "Osmena Blvd, Cebu City",
-        coordinates: [10.3101, 123.8934],
-        timestamp: new Date(Date.now() - 1000 * 60 * 12),
-        capacity: 35,
-    },
-    {
-        id: "v003",
-        type: "overspeeding",
-        status: "verified",
-        plateNumber: "DEF 9012",
-        location: "N. Bacalso Ave, Cebu City",
-        coordinates: [10.2788, 123.8901],
-        timestamp: new Date(Date.now() - 1000 * 60 * 30),
-        speed: 102,
-    },
-    {
-        id: "v004",
-        type: "overloading",
-        status: "unverified",
-        plateNumber: "GHI 3456",
-        location: "V. Rama Ave, Cebu City",
-        coordinates: [10.3198, 123.9105],
-        timestamp: new Date(Date.now() - 1000 * 60 * 45),
-        capacity: 52,
-    },
-    {
-        id: "v005",
-        type: "overspeeding",
-        status: "dismissed",
-        plateNumber: "JKL 7890",
-        location: "M.J. Cuenco Ave, Cebu City",
-        coordinates: [10.3312, 123.9201],
-        timestamp: new Date(Date.now() - 1000 * 60 * 60),
-        speed: 75,
-    },
-    {
-        id: "v006",
-        type: "overloading",
-        status: "verified",
-        plateNumber: "MNO 2345",
-        location: "Sergio Osmeña Sr. Blvd",
-        coordinates: [10.3056, 123.8956],
-        timestamp: new Date(Date.now() - 1000 * 60 * 90),
-        capacity: 28,
-    },
+  {
+    id: "v001",
+    type: "overspeeding",
+    status: "unverified",
+    plateNumber: "ABC 1234",
+    location: "Colon St, Cebu City",
+    coordinates: [10.2942, 123.9017],
+    timestamp: new Date(Date.now() - 1000 * 60 * 5),
+    speed: 87,
+  },
+  {
+    id: "v002",
+    type: "overloading",
+    status: "unverified",
+    plateNumber: "XYZ 5678",
+    location: "Osmena Blvd, Cebu City",
+    coordinates: [10.3101, 123.8934],
+    timestamp: new Date(Date.now() - 1000 * 60 * 12),
+    capacity: 35,
+  },
+  {
+    id: "v003",
+    type: "overspeeding",
+    status: "verified",
+    plateNumber: "DEF 9012",
+    location: "N. Bacalso Ave, Cebu City",
+    coordinates: [10.2788, 123.8901],
+    timestamp: new Date(Date.now() - 1000 * 60 * 30),
+    speed: 102,
+  },
+  {
+    id: "v004",
+    type: "overloading",
+    status: "unverified",
+    plateNumber: "GHI 3456",
+    location: "V. Rama Ave, Cebu City",
+    coordinates: [10.3198, 123.9105],
+    timestamp: new Date(Date.now() - 1000 * 60 * 45),
+    capacity: 52,
+  },
+  {
+    id: "v005",
+    type: "overspeeding",
+    status: "dismissed",
+    plateNumber: "JKL 7890",
+    location: "M.J. Cuenco Ave, Cebu City",
+    coordinates: [10.3312, 123.9201],
+    timestamp: new Date(Date.now() - 1000 * 60 * 60),
+    speed: 75,
+  },
+  {
+    id: "v006",
+    type: "overloading",
+    status: "verified",
+    plateNumber: "MNO 2345",
+    location: "Sergio Osmeña Sr. Blvd",
+    coordinates: [10.3056, 123.8956],
+    timestamp: new Date(Date.now() - 1000 * 60 * 90),
+    capacity: 28,
+  },
+  {
+    id: "v007",
+    type: "overspeeding",
+    status: "unverified",
+    plateNumber: "PQR 6789",
+    location: "F. Ramos St, Cebu City",
+    coordinates: [10.3001, 123.8989],
+    timestamp: new Date(Date.now() - 1000 * 60 * 120),
+    speed: 95,
+  },
+  {
+    id: "v008",
+    type: "overloading",
+    status: "unverified",
+    plateNumber: "STU 0123",
+    location: "Lapu-Lapu St, Cebu City",
+    coordinates: [10.3156, 123.9123],
+    timestamp: new Date(Date.now() - 1000 * 60 * 150),
+    capacity: 45,
+  },
+  {
+    id: "v009",
+    type: "overspeeding",
+    status: "unverified",
+    plateNumber: "VWX 4567",
+    location: "Banilad Town Center",
+    coordinates: [10.3356, 123.9056],
+    timestamp: new Date(Date.now() - 1000 * 60 * 180),
+    speed: 88,
+  },
+  {
+    id: "v010",
+    type: "overloading",
+    status: "verified",
+    plateNumber: "YZA 8901",
+    location: "IT Park, Cebu City",
+    coordinates: [10.3256, 123.9056],
+    timestamp: new Date(Date.now() - 1000 * 60 * 210),
+    capacity: 40,
+  },
 ];
+
+// ─────────────────────────────────────────
+// MAP TILE LAYERS (with labels enabled)
+// ─────────────────────────────────────────
+const mapLayers: Record<MapLayerType, { url: string; attribution: string; iconComponent: any }> = {
+  streets: {
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attribution: '',
+    iconComponent: MapIcon,
+  },
+  satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: '',
+    iconComponent: Satellite,
+  },
+  terrain: {
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attribution: '',
+    iconComponent: Mountain,
+  },
+  dark: {
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attribution: '',
+    iconComponent: Globe,
+  },
+};
 
 // ─────────────────────────────────────────
 // FIX LEAFLET DEFAULT MARKER ICONS
 // ─────────────────────────────────────────
 if (typeof window !== "undefined") {
-    delete (L.Icon.Default.prototype as any)._getIconUrl;
-    L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-    });
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+  });
 }
 
-const createIcon = (color: string) =>
-    L.divIcon({
-        className: "",
-        html: `<div style="
-      width:28px;height:28px;border-radius:50% 50% 50% 0;
-      background:${color};border:3px solid white;
-      transform:rotate(-45deg);
-      box-shadow:0 2px 8px rgba(0,0,0,0.35);
-    "></div>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 28],
-        popupAnchor: [0, -30],
+// Custom marker icons
+const createCustomIcon = (color: string, isVerified: boolean = false) => {
+  if (isVerified) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="
+        width: 28px;
+        height: 28px;
+        background: ${color};
+        border: 2px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      ">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" style="position: absolute; top: 7px; left: 7px;">
+          <path d="M20 6L9 17L4 12" stroke="white" stroke-linecap="round"/>
+        </svg>
+      </div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 28],
+      popupAnchor: [0, -28],
     });
+  }
+  
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width: 24px;
+      height: 24px;
+      background: ${color};
+      border: 2px solid white;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    ">
+      <div style="
+        width: 10px;
+        height: 10px;
+        background: white;
+        border-radius: 50%;
+        position: absolute;
+        top: 7px;
+        left: 7px;
+        transform: rotate(45deg);
+      "></div>
+    </div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 24],
+    popupAnchor: [0, -24],
+  });
+};
 
-const overspeedingIcon = createIcon("#ef4444");
-const overloadingIcon = createIcon("#3b82f6");
-const verifiedIcon = createIcon("#22c55e");
+const overspeedingIcon = createCustomIcon("#ef4444", false);
+const overloadingIcon = createCustomIcon("#3b82f6", false);
+const verifiedIcon = createCustomIcon("#22c55e", true);
 
 // ─────────────────────────────────────────
-// THEME HELPER — t(isDark, darkClasses, lightClasses)
+// THEME HELPER
 // ─────────────────────────────────────────
 const t = (isDark: boolean, dark: string, light: string) => (isDark ? dark : light);
 
@@ -134,456 +261,584 @@ const t = (isDark: boolean, dark: string, light: string) => (isDark ? dark : lig
 // ─────────────────────────────────────────
 
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
-    const map = useMap();
-    useEffect(() => { map.setView(center, zoom); }, [center, zoom, map]);
-    return null;
+  const map = useMap();
+  useEffect(() => { map.setView(center, zoom); }, [center, zoom, map]);
+  return null;
+}
+
+function MapLayerController({ layerType }: { layerType: MapLayerType }) {
+  const map = useMap();
+  
+  useEffect(() => {
+    if (!map) return;
+    
+    // Remove existing tile layers
+    map.eachLayer((layer) => {
+      if (layer instanceof L.TileLayer) {
+        map.removeLayer(layer);
+      }
+    });
+    
+    // Add new tile layer without attribution
+    const layer = mapLayers[layerType];
+    L.tileLayer(layer.url, {
+      attribution: layer.attribution,
+      maxZoom: 19,
+    }).addTo(map);
+  }, [map, layerType]);
+  
+  return null;
 }
 
 function ViolationMarker({ violation, onClick }: { violation: Violation; onClick: () => void }) {
-    const icon = violation.type === "overspeeding" ? overspeedingIcon : overloadingIcon;
+  let icon;
+  if (violation.status === "verified") {
+    icon = verifiedIcon;
+  } else {
+    icon = violation.type === "overspeeding" ? overspeedingIcon : overloadingIcon;
+  }
 
-    return (
-        <Marker position={violation.coordinates} icon={icon} eventHandlers={{ click: onClick }}>
-            <Popup>
-                <div className="text-sm min-w-[160px]">
-                    <p className="font-bold text-slate-800">{violation.plateNumber}</p>
-                    <p className="text-slate-500 text-xs">{violation.location}</p>
-                    <p className="mt-1 capitalize text-xs font-semibold"
-                        style={{ color: violation.type === "overspeeding" ? "#ef4444" : "#3b82f6" }}>
-                        {violation.type}
-                        {violation.speed ? ` · ${violation.speed} km/h` : ""}
-                        {violation.capacity ? ` · ${violation.capacity}% over` : ""}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-1">{format(violation.timestamp, "hh:mm a")}</p>
-                </div>
-            </Popup>
-        </Marker>
-    );
+  return (
+    <Marker position={violation.coordinates} icon={icon} eventHandlers={{ click: onClick }}>
+      <Popup>
+        <div className="min-w-[180px] p-1">
+          <div className="flex items-center justify-between mb-1">
+            <p className="font-bold text-slate-800 text-sm">{violation.plateNumber}</p>
+            {violation.status === "verified" && (
+              <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Verified</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-slate-500 text-[10px] mb-1">
+            <MapPin size={10} />
+            <span>{violation.location}</span>
+          </div>
+          <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100">
+            <div className="flex items-center gap-1">
+              {violation.type === "overspeeding" ? (
+                <>
+                  <Gauge size={12} className="text-red-500" />
+                  <span className="text-xs font-semibold text-red-600">{violation.speed} km/h</span>
+                </>
+              ) : (
+                <>
+                  <Weight size={12} className="text-blue-500" />
+                  <span className="text-xs font-semibold text-blue-600">{violation.capacity}% over</span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-1 text-slate-400 text-[9px]">
+              <Clock size={8} />
+              <span>{format(violation.timestamp, "hh:mm a")}</span>
+            </div>
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
 }
 
 function StatusBadge({ status }: { status: ViolationStatus }) {
-    const map: Record<ViolationStatus, { label: string; cls: string }> = {
-        unverified: { label: "Unverified", cls: "bg-amber-100 text-amber-700" },
-        verified: { label: "Verified", cls: "bg-green-100 text-green-700" },
-        dismissed: { label: "Dismissed", cls: "bg-slate-200 text-slate-500" },
-    };
-    const { label, cls } = map[status];
-    return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
+  const config = {
+    unverified: { label: "Unverified", icon: AlertTriangle, className: "bg-amber-50 text-amber-700" },
+    verified: { label: "Verified", icon: CheckCircle, className: "bg-emerald-50 text-emerald-700" },
+    dismissed: { label: "Dismissed", icon: XCircle, className: "bg-slate-100 text-slate-500" },
+  };
+  
+  const { label, icon: Icon, className } = config[status];
+  
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium ${className}`}>
+      <Icon size={8} />
+      {label}
+    </span>
+  );
 }
 
-function QuickViewModal({
-    violation, isDark, onClose, onVerify, onDismiss,
-}: {
-    violation: Violation;
-    isDark: boolean;
-    onClose: () => void;
-    onVerify: (id: string) => void;
-    onDismiss: (id: string) => void;
-}) {
-    return (
-        <div className="fixed inset-0 z-2000 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className={`rounded-2xl shadow-2xl w-[420px] p-6 relative transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
-                <button
-                    onClick={onClose}
-                    className={`absolute top-4 right-4 transition ${t(isDark, "text-slate-400 hover:text-white", "text-slate-400 hover:text-slate-700")}`}
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-
-                <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${violation.type === "overspeeding" ? "bg-red-100" : "bg-blue-100"}`}>
-                        {violation.type === "overspeeding" ? (
-                            <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        ) : (
-                            <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                            </svg>
-                        )}
-                    </div>
-                    <div>
-                        <h2 className={`font-bold text-lg capitalize ${t(isDark, "text-white", "text-slate-800")}`}>{violation.type}</h2>
-                        <p className="text-slate-400 text-xs">{format(violation.timestamp, "MMM dd, yyyy · hh:mm a")}</p>
-                    </div>
-                    <div className="ml-auto"><StatusBadge status={violation.status} /></div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                    {[
-                        { label: "Plate Number", value: violation.plateNumber },
-                        {
-                            label: violation.type === "overspeeding" ? "Speed" : "Over Capacity",
-                            value: violation.speed ? `${violation.speed} km/h` : `${violation.capacity}%`,
-                        },
-                    ].map(({ label, value }) => (
-                        <div key={label} className={`rounded-xl p-3 ${t(isDark, "bg-[#334155]", "bg-slate-50")}`}>
-                            <p className="text-[10px] text-slate-400 font-semibold uppercase mb-1">{label}</p>
-                            <p className={`font-bold ${t(isDark, "text-white", "text-slate-800")}`}>{value}</p>
-                        </div>
-                    ))}
-                    <div className={`rounded-xl p-3 col-span-2 ${t(isDark, "bg-[#334155]", "bg-slate-50")}`}>
-                        <p className="text-[10px] text-slate-400 font-semibold uppercase mb-1">Location</p>
-                        <p className={`font-medium text-sm ${t(isDark, "text-white", "text-slate-800")}`}>{violation.location}</p>
-                    </div>
-                </div>
-
-                {violation.status === "unverified" && (
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => { onVerify(violation.id); onClose(); }}
-                            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-semibold py-2.5 rounded-xl text-sm transition"
-                        >Verify</button>
-                        <button
-                            onClick={() => { onDismiss(violation.id); onClose(); }}
-                            className={`flex-1 font-semibold py-2.5 rounded-xl text-sm transition ${t(isDark, "bg-[#334155] hover:bg-[#475569] text-slate-200", "bg-slate-100 hover:bg-slate-200 text-slate-700")}`}
-                        >Dismiss</button>
-                    </div>
+function QuickViewModal({ violation, isDark, onClose, onVerify, onDismiss }: any) {
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className={`rounded-2xl shadow-2xl w-[460px] max-w-[90vw] overflow-hidden transition-all animate-in zoom-in-95 duration-200 ${t(isDark, "bg-slate-900", "bg-white")}`}>
+        <div className={`p-5 border-b ${t(isDark, "border-slate-700", "border-slate-100")}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl ${violation.type === "overspeeding" ? "bg-red-100 dark:bg-red-500/20" : "bg-blue-100 dark:bg-blue-500/20"}`}>
+                {violation.type === "overspeeding" ? (
+                  <Gauge size={20} className="text-red-600 dark:text-red-400" />
+                ) : (
+                  <Weight size={20} className="text-blue-600 dark:text-blue-400" />
                 )}
+              </div>
+              <div>
+                <h2 className={`text-lg font-bold capitalize ${t(isDark, "text-white", "text-slate-800")}`}>
+                  {violation.type}
+                </h2>
+                <p className="text-slate-500 text-xs">{format(violation.timestamp, "MMMM dd, yyyy 'at' hh:mm a")}</p>
+              </div>
             </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              <XCircle size={18} className="text-slate-400" />
+            </button>
+          </div>
         </div>
-    );
-}
 
-function LogoutModal({
-    isDark, onConfirm, onCancel,
-}: {
-    isDark: boolean;
-    onConfirm: () => void;
-    onCancel: () => void;
-}) {
-    return (
-        <div className="fixed inset-0 z-2000 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className={`rounded-2xl shadow-2xl w-[360px] p-6 transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
-                <div className="flex justify-center mb-4">
-                    <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
-                        <svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                    </div>
-                </div>
-                <h2 className={`text-center font-bold text-lg mb-1 ${t(isDark, "text-white", "text-slate-800")}`}>Sign Out</h2>
-                <p className="text-center text-slate-400 text-sm mb-6">Are you sure you want to log out of the admin panel?</p>
-                <div className="flex gap-3">
-                    <button
-                        onClick={onCancel}
-                        className={`flex-1 font-semibold py-2.5 rounded-xl text-sm transition ${t(isDark, "bg-[#334155] hover:bg-[#475569] text-slate-200", "bg-slate-100 hover:bg-slate-200 text-slate-700")}`}
-                    >Cancel</button>
-                    <button
-                        onClick={onConfirm}
-                        className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl text-sm transition"
-                    >Log Out</button>
-                </div>
+        <div className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`p-3 rounded-xl ${t(isDark, "bg-slate-800/50", "bg-slate-50")}`}>
+              <p className="text-slate-500 text-[10px] font-medium uppercase mb-0.5">Plate Number</p>
+              <p className={`text-base font-bold ${t(isDark, "text-white", "text-slate-800")}`}>{violation.plateNumber}</p>
             </div>
+            <div className={`p-3 rounded-xl ${t(isDark, "bg-slate-800/50", "bg-slate-50")}`}>
+              <p className="text-slate-500 text-[10px] font-medium uppercase mb-0.5">
+                {violation.type === "overspeeding" ? "Speed" : "Over Capacity"}
+              </p>
+              <p className={`text-base font-bold ${t(isDark, "text-white", "text-slate-800")}`}>
+                {violation.speed ? `${violation.speed} km/h` : `${violation.capacity}%`}
+              </p>
+            </div>
+          </div>
+          
+          <div className={`p-3 rounded-xl ${t(isDark, "bg-slate-800/50", "bg-slate-50")}`}>
+            <p className="text-slate-500 text-[10px] font-medium uppercase mb-0.5">Location</p>
+            <div className="flex items-center gap-1.5">
+              <MapPin size={12} className="text-slate-400" />
+              <p className={`text-sm font-medium ${t(isDark, "text-white", "text-slate-800")}`}>{violation.location}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <StatusBadge status={violation.status} />
+            <div className="text-[10px] text-slate-400">ID: {violation.id}</div>
+          </div>
         </div>
-    );
+
+        {violation.status === "unverified" && (
+          <div className={`p-5 border-t flex gap-3 ${t(isDark, "border-slate-700", "border-slate-100")}`}>
+            <button
+              onClick={() => { onVerify(violation.id); onClose(); }}
+              className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-semibold py-2 rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/25"
+            >
+              Verify Violation
+            </button>
+            <button
+              onClick={() => { onDismiss(violation.id); onClose(); }}
+              className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold py-2 rounded-xl text-sm transition"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────
 // MAIN DASHBOARD
 // ─────────────────────────────────────────
 export default function AdminDashboard() {
-    const { theme } = useTheme();
-    const { logout } = useAuth();
-    const router = useRouter();
+  const { theme } = useTheme();
+  const { logout } = useAuth();
+  const router = useRouter();
 
-    const isDark = theme === "dark";
+  const isDark = theme === "dark";
 
-    const [timeFilter, setTimeFilter] = useState("Today");
-    const [showOverloading, setShowOverloading] = useState(true);
-    const [showOverspeeding, setShowOverspeeding] = useState(true);
-    const [mapCenter] = useState<[number, number]>([10.3235, 123.9222]);
-    const [mapZoom] = useState(13);
-    const [violations, setViolations] = useState<Violation[]>(SAMPLE_VIOLATIONS);
-    const [showLogoutModal, setShowLogoutModal] = useState(false);
-    const [selectedViolation, setSelectedViolation] = useState<Violation | null>(null);
-    const [currentTime, setCurrentTime] = useState(new Date());
+  const [mapCenter] = useState<[number, number]>([10.3235, 123.9222]);
+  const [mapZoom] = useState(12);
+  const [mapLayer, setMapLayer] = useState<MapLayerType>("streets");
+  const [showLayerMenu, setShowLayerMenu] = useState(false);
+  const [violations, setViolations] = useState<Violation[]>(SAMPLE_VIOLATIONS);
+  const [selectedViolation, setSelectedViolation] = useState<Violation | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // Filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<ViolationType | "all">("all");
 
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-    // ── Derived ───────────────────────────
-    const filteredViolations = violations.filter((v) => {
-        if (!showOverloading && v.type === "overloading") return false;
-        if (!showOverspeeding && v.type === "overspeeding") return false;
-        return true;
+  // Filtered violations based on search and filters
+  const filteredViolations = useMemo(() => {
+    return violations.filter((v) => {
+      if (searchQuery && !v.plateNumber.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+      if (statusFilter !== "all" && v.status !== statusFilter) {
+        return false;
+      }
+      if (typeFilter !== "all" && v.type !== typeFilter) {
+        return false;
+      }
+      return true;
     });
+  }, [violations, searchQuery, statusFilter, typeFilter]);
 
-    const unverifiedViolations = violations.filter((v) => v.status === "unverified");
-    const overspeedingCount = violations.filter((v) => v.type === "overspeeding").length;
-    const overloadingCount = violations.filter((v) => v.type === "overloading").length;
+  const stats = useMemo(() => ({
+    total: violations.length,
+    unverified: violations.filter(v => v.status === "unverified").length,
+    verified: violations.filter(v => v.status === "verified").length,
+    dismissed: violations.filter(v => v.status === "dismissed").length,
+    overspeeding: violations.filter(v => v.type === "overspeeding").length,
+    overloading: violations.filter(v => v.type === "overloading").length,
+  }), [violations]);
 
-    // ── Handlers ──────────────────────────
-    const handleVerifyViolation = (id: string) =>
-        setViolations((prev) => prev.map((v) => v.id === id ? { ...v, status: "verified" } : v));
+  const handleVerifyViolation = useCallback((id: string) => {
+    setViolations((prev) => prev.map((v) => v.id === id ? { ...v, status: "verified" } : v));
+  }, []);
 
-    const handleDismissViolation = (id: string) =>
-        setViolations((prev) => prev.map((v) => v.id === id ? { ...v, status: "dismissed" } : v));
+  const handleDismissViolation = useCallback((id: string) => {
+    setViolations((prev) => prev.map((v) => v.id === id ? { ...v, status: "dismissed" } : v));
+  }, []);
 
-    const showQuickView = (violation: Violation) => setSelectedViolation(violation);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+  };
 
-    const handleLogout = () => { logout?.(); router.push("/login"); };
+  const layerOptions: { id: MapLayerType; label: string; icon: any }[] = [
+    { id: "streets", label: "Streets", icon: MapIcon },
+    { id: "satellite", label: "Satellite", icon: Satellite },
+    { id: "terrain", label: "Terrain", icon: Mountain },
+    { id: "dark", label: "Dark", icon: Globe },
+  ];
 
-    // ── Render ────────────────────────────
-    return (
-        <div className={`flex flex-col h-screen w-full overflow-hidden transition-colors duration-300 ${t(isDark, "bg-[#0f172a]", "bg-slate-50")}`}>
+  const CurrentLayerIcon = mapLayers[mapLayer].iconComponent;
 
-            {/* ── AppBar ── */}
-            <header className={`h-[72px] border-b flex items-center justify-between px-6 shrink-0 shadow-sm transition-colors duration-300 ${t(isDark, "bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
-                <div className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-blue-600 to-blue-400 rounded-full text-white shadow">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <span className="text-sm font-bold tracking-wide">ADMIN PANEL</span>
-                </div>
+  return (
+    <div className={`h-screen w-full overflow-hidden transition-colors duration-300 ${t(isDark, "bg-slate-900", "bg-slate-50")}`}>
+      
+      {/* Improved Header - Clean and Professional */}
+      <header className={`h-12 border-b flex items-center justify-between px-5 shrink-0 transition-all ${t(isDark, "bg-slate-900/80 border-slate-700/50", "bg-white/80 border-slate-200/50")} backdrop-blur-md`}>
+        
+        {/* Left - Stats Cards */}
+        <div className="flex items-center gap-4">
+          {/* Total Events */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-blue-500/10 flex items-center justify-center">
+              <Car size={13} className="text-blue-500" />
+            </div>
+            <div>
+              <p className="text-[9px] font-medium text-slate-500 dark:text-slate-400 leading-tight">Total</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-white leading-tight">{stats.total}</p>
+            </div>
+          </div>
 
-                <div
-                    onClick={() => setShowLogoutModal(true)}
-                    className={`flex items-center gap-3 px-3 py-1.5 border rounded-full cursor-pointer transition ${t(isDark, "bg-[#334155] border-slate-600 hover:bg-[#475569]", "bg-slate-50 border-slate-200 hover:bg-slate-100")}`}
-                >
-                    <div className="w-9 h-9 bg-linear-to-r from-blue-600 to-blue-500 rounded-full flex items-center justify-center text-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                    </div>
-                    <div className="flex flex-col">
-                        <span className={`text-sm font-bold ${t(isDark, "text-white", "text-slate-800")}`}>Admin User</span>
-                        <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 bg-green-500 rounded-full" />
-                            <span className="text-[11px] text-slate-400">Online</span>
-                        </div>
-                    </div>
-                    <svg className="w-4 h-4 text-slate-400 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                </div>
-            </header>
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
 
-            {/* ── Body ── */}
-            <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Unverified */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-amber-500/10 flex items-center justify-center">
+              <AlertTriangle size={13} className="text-amber-500" />
+            </div>
+            <div>
+              <p className="text-[9px] font-medium text-amber-600 dark:text-amber-400 leading-tight">Pending</p>
+              <p className="text-sm font-bold text-amber-600 dark:text-amber-400 leading-tight">{stats.unverified}</p>
+            </div>
+          </div>
 
-                {/* Control Bar */}
-                <div className={`border-b px-6 py-4 shadow-sm transition-colors duration-300 ${t(isDark, "bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
-                    <div className="flex items-center gap-4 flex-wrap">
+          {/* Verified */}
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle size={13} className="text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400 leading-tight">Verified</p>
+              <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 leading-tight">{stats.verified}</p>
+            </div>
+          </div>
 
-                        {/* Time Filter */}
-                        <div className="relative">
-                            <select
-                                value={timeFilter}
-                                onChange={(e) => setTimeFilter(e.target.value)}
-                                className={`appearance-none border rounded-lg px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${t(isDark, "bg-[#334155] border-slate-600 text-white", "bg-slate-50 border-slate-300 text-black")}`}
-                            >
-                                <option>Today</option>
-                                <option>This Week</option>
-                                <option>This Month</option>
-                            </select>
-                            <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </div>
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
 
-                        {/* Toggle: Overcapacity */}
-                        <button
-                            onClick={() => setShowOverloading((p) => !p)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition ${showOverloading
-                                ? "bg-blue-50 border-blue-300 text-blue-700"
-                                : t(isDark, "bg-[#334155] border-slate-600 text-slate-400", "bg-slate-50 border-slate-300 text-slate-400")
-                                }`}
-                        >
-                            <div className={`w-2.5 h-2.5 rounded-full ${showOverloading ? "bg-blue-500" : "bg-slate-400"}`} />
-                            Overcapacity
-                        </button>
-
-                        {/* Toggle: Overspeeding */}
-                        <button
-                            onClick={() => setShowOverspeeding((p) => !p)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition ${showOverspeeding
-                                ? "bg-red-50 border-red-300 text-red-700"
-                                : t(isDark, "bg-[#334155] border-slate-600 text-slate-400", "bg-slate-50 border-slate-300 text-slate-400")
-                                }`}
-                        >
-                            <div className={`w-2.5 h-2.5 rounded-full ${showOverspeeding ? "bg-red-500" : "bg-slate-400"}`} />
-                            Overspeeding
-                        </button>
-
-                        <div className="flex-1" />
-
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-blue-500 font-bold text-sm">Live Vehicle Monitoring</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Map + Right Panel ── */}
-                <div className="flex-1 flex overflow-hidden">
-
-                    {/* Map */}
-                    <div className="flex-7 p-6">
-                        <div className="relative h-full rounded-2xl shadow-lg overflow-hidden">
-                            <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }} className="z-0">
-                                <TileLayer
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                />
-                                {filteredViolations.map((violation) => (
-                                    <ViolationMarker
-                                        key={violation.id}
-                                        violation={violation}
-                                        onClick={() => showQuickView(violation)}
-                                    />
-                                ))}
-                                <MapController center={mapCenter} zoom={mapZoom} />
-                            </MapContainer>
-
-                            {/* Map Legend */}
-                            <div className={`absolute bottom-5 left-5 rounded-xl shadow-md p-4 z-1000 transition-colors ${t(isDark, "bg-[#1e293b]", "bg-white")}`}>
-                                <p className={`font-bold text-sm mb-3 ${t(isDark, "text-white", "text-slate-800")}`}>Map Legend</p>
-                                <div className="flex flex-col gap-2">
-                                    {[
-                                        { color: "bg-red-500", label: "Overspeeding" },
-                                        { color: "bg-blue-500", label: "Overcapacity" },
-                                    ].map(({ color, label }) => (
-                                        <div key={label} className="flex items-center gap-2">
-                                            <div className={`w-3 h-3 rounded-full ${color}`} />
-                                            <span className={`text-xs ${t(isDark, "text-slate-300", "text-slate-600")}`}>{label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Right Panel ── */}
-                    <div className={`w-[380px] border-l flex flex-col overflow-hidden transition-colors duration-300 ${t(isDark, "bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
-
-                        {/* Stats Grid */}
-                        <div className={`border-b p-6 transition-colors duration-300 ${t(isDark, "bg-[#0f172a] border-slate-700", "bg-slate-50 border-slate-200")}`}>
-                            <p className={`text-xs font-semibold uppercase tracking-widest mb-4 ${t(isDark, "text-slate-400", "text-slate-500")}`}>
-                                Overview · {timeFilter}
-                            </p>
-                            <div className="grid grid-cols-2 gap-3">
-                                {[
-                                    { label: "Active Vehicles", value: violations.length, color: "blue", Icon: Car },
-                                    { label: "Alerts Today", value: unverifiedViolations.length, color: "amber", Icon: Bell },
-                                    { label: "Date", value: format(currentTime, "MMM dd, yyyy"), color: "rose", Icon: Calendar },
-                                    { label: "Time", value: format(currentTime, "hh:mm:ss a"), color: "indigo", Icon: Clock },
-                                ].map(({ label, value, color, Icon }) => {
-                                    const colors: any = {
-                                        blue: { text: "text-white", bg: "bg-blue-600 shadow-blue-100 dark:shadow-blue-900/10" },
-                                        amber: { text: "text-white", bg: "bg-amber-600 shadow-amber-100 dark:shadow-amber-900/10" },
-                                        rose: { text: "text-white", bg: "bg-rose-600 shadow-rose-100 dark:shadow-rose-900/10" },
-                                        indigo: { text: "text-white", bg: "bg-indigo-600 shadow-indigo-100 dark:shadow-indigo-900/10" },
-                                    }[color];
-
-                                    return (
-                                        <div key={label} className={`rounded-2xl p-4 border transition-all ${t(isDark, "bg-[#1e293b] border-slate-700 shadow-sm", "bg-white border-slate-100 shadow-md shadow-slate-200/50")}`}>
-                                            <div className={`mb-3 p-2 rounded-xl inline-flex ${colors.bg} ${colors.text} shadow-sm`}>
-                                                <Icon size={18} strokeWidth={2.4} />
-                                            </div>
-                                            <p className={`text-[10px] uppercase tracking-widest mb-1 ${t(isDark, "text-slate-400", "text-slate-500")}`}>{label}</p>
-                                            <p className={`text-sm truncate ${t(isDark, "text-slate-50", "text-slate-800")}`}>{value}</p>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Recent Alerts Header */}
-                        <div className={`border-b px-5 py-4 flex items-center justify-between shrink-0 ${t(isDark, "border-slate-700", "border-slate-200")}`}>
-                            <p className={`font-bold text-sm ${t(isDark, "text-white", "text-slate-800")}`}>Recent Alerts</p>
-                            <span className="text-[11px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">
-                                {unverifiedViolations.length} pending
-                            </span>
-                        </div>
-
-                        {/* Violation List */}
-                        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-                            {violations.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                    <svg className="w-10 h-10 mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <p className="text-sm">No violations recorded</p>
-                                </div>
-                            ) : (
-                                violations.map((violation) => (
-                                    <div
-                                        key={violation.id}
-                                        onClick={() => showQuickView(violation)}
-                                        className={`border rounded-xl p-4 cursor-pointer transition group ${t(isDark,
-                                            "bg-[#334155] border-slate-600 hover:bg-[#3d5068] hover:border-blue-500",
-                                            "bg-slate-50 border-slate-200 hover:bg-blue-50 hover:border-blue-200"
-                                        )}`}
-                                    >
-                                        <div className="flex items-start justify-between gap-2 mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${violation.type === "overspeeding" ? "bg-red-100" : "bg-blue-100"}`}>
-                                                    {violation.type === "overspeeding" ? (
-                                                        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                                        </svg>
-                                                    ) : (
-                                                        <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                                                        </svg>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <p className={`font-bold text-sm ${t(isDark, "text-white", "text-slate-800")}`}>{violation.plateNumber}</p>
-                                                    <p className="text-slate-400 text-[11px] capitalize">{violation.type}</p>
-                                                </div>
-                                            </div>
-                                            <StatusBadge status={violation.status} />
-                                        </div>
-
-                                        <p className="text-slate-400 text-xs mb-2 truncate">{violation.location}</p>
-
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[11px] text-slate-400">{format(violation.timestamp, "hh:mm a")}</span>
-                                            {violation.status === "unverified" && (
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleVerifyViolation(violation.id); }}
-                                                        className="text-[11px] font-semibold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-2 py-1 rounded-lg transition"
-                                                    >Verify</button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDismissViolation(violation.id); }}
-                                                        className={`text-[11px] font-semibold px-2 py-1 rounded-lg transition ${t(isDark, "text-slate-300 bg-slate-600 hover:bg-slate-500", "text-slate-500 bg-slate-100 hover:bg-slate-200")}`}
-                                                    >Dismiss</button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            {/* ── Modals ── */}
-            {selectedViolation && (
-                <QuickViewModal
-                    violation={selectedViolation}
-                    isDark={isDark}
-                    onClose={() => setSelectedViolation(null)}
-                    onVerify={handleVerifyViolation}
-                    onDismiss={handleDismissViolation}
-                />
-            )}
-
-            {showLogoutModal && (
-                <LogoutModal
-                    isDark={isDark}
-                    onConfirm={handleLogout}
-                    onCancel={() => setShowLogoutModal(false)}
-                />
-            )}
+          {/* Type Stats */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+              <span className="text-[9px] font-medium text-slate-600 dark:text-slate-400">Speeding</span>
+              <span className="text-xs font-bold text-red-600 dark:text-red-400">{stats.overspeeding}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+              <span className="text-[9px] font-medium text-slate-600 dark:text-slate-400">Overload</span>
+              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{stats.overloading}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
+              <span className="text-[9px] font-medium text-slate-600 dark:text-slate-400">Dismissed</span>
+              <span className="text-xs font-bold text-slate-500">{stats.dismissed}</span>
+            </div>
+          </div>
         </div>
-    );
+
+        {/* Right - Map Layer Selector, Live Status & Time */}
+        <div className="flex items-center gap-4">
+          {/* Map Layer Dropdown - Fixed positioning */}
+          <div className="relative">
+            <button
+              onClick={() => setShowLayerMenu(!showLayerMenu)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all z-10 relative ${t(isDark, "bg-slate-800 hover:bg-slate-700 text-slate-300", "bg-slate-100 hover:bg-slate-200 text-slate-700")}`}
+            >
+              <Layers size={12} />
+              <CurrentLayerIcon size={12} className="opacity-70" />
+              <span className="capitalize">{mapLayer}</span>
+            </button>
+            
+            {showLayerMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowLayerMenu(false)} />
+                <div className={`absolute right-0 top-full mt-1 rounded-lg shadow-lg border overflow-hidden z-50 min-w-[130px] ${t(isDark, "bg-slate-800 border-slate-700", "bg-white border-slate-200")}`}>
+                  {layerOptions.map((layer) => {
+                    const Icon = layer.icon;
+                    return (
+                      <button
+                        key={layer.id}
+                        onClick={() => {
+                          setMapLayer(layer.id);
+                          setShowLayerMenu(false);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
+                          mapLayer === layer.id
+                            ? t(isDark, "bg-blue-500/20 text-blue-400", "bg-blue-50 text-blue-600")
+                            : t(isDark, "text-slate-300 hover:bg-slate-700", "text-slate-700 hover:bg-slate-50")
+                        }`}
+                      >
+                        <Icon size={12} />
+                        {layer.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
+
+          {/* Live Status */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">LIVE</span>
+          </div>
+          
+          {/* Date & Time */}
+          <div className="flex items-center gap-2 text-slate-400">
+            <Calendar size={11} />
+            <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
+              {format(currentTime, "MMM dd")}
+            </span>
+            <Clock size={11} />
+            <span className="text-[10px] font-mono font-medium text-slate-600 dark:text-slate-300">
+              {format(currentTime, "hh:mm:ss a")}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex h-[calc(100vh-3rem)] overflow-hidden">
+        
+        {/* Map Area - Larger (70%) */}
+        <div className="flex-[7] p-3">
+          <div className="relative h-full rounded-xl shadow-xl overflow-hidden border border-slate-200/50 dark:border-slate-700/50">
+            <MapContainer 
+              center={mapCenter} 
+              zoom={mapZoom} 
+              style={{ height: "100%", width: "100%" }} 
+              className="z-0"
+              zoomControl={false}
+              attributionControl={false}
+            >
+              <MapLayerController layerType={mapLayer} />
+              {violations.map((violation) => (
+                <ViolationMarker
+                  key={violation.id}
+                  violation={violation}
+                  onClick={() => setSelectedViolation(violation)}
+                />
+              ))}
+              <MapController center={mapCenter} zoom={mapZoom} />
+            </MapContainer>
+
+            {/* Map Legend - Compact */}
+            <div className="absolute bottom-3 left-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-md p-2 border border-slate-200/50 dark:border-slate-700/50 z-[1000]">
+              <div className="flex gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 bg-red-500 rounded-full shadow-sm" />
+                  <span className="text-[9px] text-slate-600 dark:text-slate-400">Speeding</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-sm" />
+                  <span className="text-[9px] text-slate-600 dark:text-slate-400">Overload</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-sm" />
+                  <span className="text-[9px] text-slate-600 dark:text-slate-400">Verified</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Map Controls Hint */}
+            <div className="absolute bottom-3 right-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-lg shadow-md p-1.5 text-[9px] text-slate-500 dark:text-slate-400 z-[1000]">
+              <Navigation size={10} className="inline mr-1" />
+              Zoom • Pan
+            </div>
+          </div>
+        </div>
+
+        {/* Right Panel - Compact List with Filters (30%) */}
+        <div className={`flex-[3] border-l flex flex-col overflow-hidden ${t(isDark, "bg-slate-900/95 border-slate-700/50", "bg-white border-slate-200/50")}`}>
+          
+          {/* Filter Bar - Compact */}
+          <div className="p-3 space-y-2 border-b border-slate-200/50 dark:border-slate-700/50">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search plate..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${t(isDark, "bg-slate-800 border-slate-700 text-white placeholder:text-slate-500", "bg-slate-50 border-slate-200 text-slate-800")}`}
+                />
+              </div>
+              {(searchQuery || statusFilter !== "all" || typeFilter !== "all") && (
+                <button
+                  onClick={clearFilters}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <X size={12} className="text-slate-400" />
+                </button>
+              )}
+            </div>
+            
+            <div className="flex gap-2">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className={`flex-1 text-[10px] rounded-lg border px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 ${t(isDark, "border-slate-700 text-slate-300", "border-slate-200 text-slate-700")}`}
+              >
+                <option value="all">All Status</option>
+                <option value="unverified">Unverified</option>
+                <option value="verified">Verified</option>
+                <option value="dismissed">Dismissed</option>
+              </select>
+              
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as any)}
+                className={`flex-1 text-[10px] rounded-lg border px-2 py-1 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-500 ${t(isDark, "border-slate-700 text-slate-300", "border-slate-200 text-slate-700")}`}
+              >
+                <option value="all">All Types</option>
+                <option value="overspeeding">Speeding</option>
+                <option value="overloading">Overload</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] text-slate-500">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{filteredViolations.length}</span> of {violations.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Filter size={9} className="text-slate-400" />
+                <span className="text-[8px] text-slate-400">Filtered</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Violation List */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {filteredViolations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                <CheckCircle size={32} className="mb-2 opacity-30" />
+                <p className="text-xs">No violations found</p>
+              </div>
+            ) : (
+              filteredViolations.map((violation) => (
+                <div
+                  key={violation.id}
+                  onClick={() => setSelectedViolation(violation)}
+                  className={`group p-2 rounded-lg border cursor-pointer transition-all duration-150 ${
+                    t(isDark, 
+                      "bg-slate-800/30 border-slate-700/50 hover:bg-slate-800 hover:border-blue-500/50", 
+                      "bg-white border-slate-200/50 hover:bg-slate-50 hover:border-blue-300/50"
+                    )
+                  }`}
+                >
+                  {/* Row 1: Plate + Type + Status */}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className={`p-1 rounded ${violation.type === "overspeeding" ? "bg-red-100 dark:bg-red-500/20" : "bg-blue-100 dark:bg-blue-500/20"}`}>
+                        {violation.type === "overspeeding" ? (
+                          <Gauge size={10} className="text-red-600 dark:text-red-400" />
+                        ) : (
+                          <Weight size={10} className="text-blue-600 dark:text-blue-400" />
+                        )}
+                      </div>
+                      <p className={`font-bold text-xs ${t(isDark, "text-white", "text-slate-800")}`}>
+                        {violation.plateNumber}
+                      </p>
+                    </div>
+                    <StatusBadge status={violation.status} />
+                  </div>
+                  
+                  {/* Row 2: Location + Time */}
+                  <div className="flex items-center justify-between text-slate-400 text-[9px] mb-1">
+                    <div className="flex items-center gap-1">
+                      <MapPin size={8} />
+                      <span className="truncate max-w-[120px]">{violation.location.split(',')[0]}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock size={8} />
+                      <span>{format(violation.timestamp, "hh:mm a")}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Row 3: Value + Actions */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-semibold">
+                      {violation.type === "overspeeding" ? (
+                        <span className="text-red-600 dark:text-red-400">{violation.speed} km/h</span>
+                      ) : (
+                        <span className="text-blue-600 dark:text-blue-400">{violation.capacity}% over</span>
+                      )}
+                    </div>
+                    {violation.status === "unverified" && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleVerifyViolation(violation.id); }}
+                          className="text-[9px] font-medium text-emerald-600 hover:text-emerald-700 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/20"
+                        >
+                          Verify
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDismissViolation(violation.id); }}
+                          className="text-[9px] font-medium text-slate-500 hover:text-slate-700 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal */}
+      {selectedViolation && (
+        <QuickViewModal
+          violation={selectedViolation}
+          isDark={isDark}
+          onClose={() => setSelectedViolation(null)}
+          onVerify={handleVerifyViolation}
+          onDismiss={handleDismissViolation}
+        />
+      )}
+    </div>
+  );
 }

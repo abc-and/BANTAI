@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# local environment files (private)
+.env*
+
+# private keys
+*.pem
+*.key
+*.p12
+
+# editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

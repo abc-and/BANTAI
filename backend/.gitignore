@@ -1,0 +1,18 @@
+node_modules/
+
+# ignore backend private environment files
+.env*
+
+# ignore temporary files and private keys
+*.pem
+*.key
+.DS_Store
+
+# editor and OS files
+.vscode/
+.idea/
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

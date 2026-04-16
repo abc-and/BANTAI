@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
     Bus, Edit, Info, CheckCircle2, PauseCircle, Search,
     X, Filter, Download
@@ -16,61 +16,27 @@ export interface ModernJeepney {
     route: string;
     sittingCapacity: number;
     standingCapacity: number;
-    registrationDate: Date;
+    speedLimit: number;
+    registrationDate: string;
     status: "Active" | "Inactive";
     violationCount: number;
 }
 
 const AVAILABLE_ROUTES = [
-    "04A", "04B", "04C", "06A", "06B", "06C", "06D",
-    "12A", "12B", "13A", "13B", "13C", "14A", "14B",
-    "15A", "15B", "16A", "16B", "17A", "17B"
+    "Paknaan - Parkmall (vice versa)",
+    "Parkmall - Cabancalan",
+    "Mandaue City Hall - SM City Cebu (vice versa)",
+    "IT Park - Ayala Center Cebu",
+    "Lahug - Talamban",
+    "Carbon Market - Cebu City Hall",
+    "SM City Cebu - Ayala Center Cebu",
+    "Talisay - Cebu City"
 ];
 
-const INITIAL_VEHICLES: ModernJeepney[] = [
-    {
-        vehicleId: "MPUJ-001",
-        driverName: "Juan Dela Cruz",
-        plateNumber: "JE-1234",
-        vehicleType: "Electric",
-        vehicleModel: "Sarao E-Jeep",
-        operator: "Mandaue Transport Coop",
-        route: "04A",
-        sittingCapacity: 18,
-        standingCapacity: 12,
-        registrationDate: new Date(2024, 0, 15),
-        status: "Active",
-        violationCount: 2,
-    },
-    {
-        vehicleId: "MPUJ-002",
-        driverName: "Maria Santos",
-        plateNumber: "JE-5678",
-        vehicleType: "Diesel-Electric Hybrid",
-        vehicleModel: "Toyota Hiace Modernized",
-        operator: "Cebu Jeepney Operators",
-        route: "06B",
-        sittingCapacity: 15,
-        standingCapacity: 10,
-        registrationDate: new Date(2024, 1, 20),
-        status: "Active",
-        violationCount: 0,
-    },
-    {
-        vehicleId: "MPUJ-003",
-        driverName: "Pedro Gonzales",
-        plateNumber: "JE-9101",
-        vehicleType: "Euro 4 Compliant",
-        vehicleModel: "Isuzu Modern Jeepney",
-        operator: "Metro Cebu Transport",
-        route: "13A",
-        sittingCapacity: 20,
-        standingCapacity: 8,
-        registrationDate: new Date(2024, 2, 10),
-        status: "Inactive",
-        violationCount: 1,
-    },
-];
+const OPERATOR_OPTIONS = ["MANTRASCO", "UDOTCO", "Others"];
+const VEHICLE_TYPE_OPTIONS = ["Electric", "Diesel-Electric Hybrid", "Euro 4 Compliant"];
+const VEHICLE_MODEL_OPTIONS = ["Hino", "Others"];
+
 
 export default function ModernJeepneyRegistration() {
     const [registeredVehicles, setRegisteredVehicles] = useState<ModernJeepney[]>([]);
@@ -80,17 +46,34 @@ export default function ModernJeepneyRegistration() {
     const [vehicleId, setVehicleId] = useState("");
     const [driverName, setDriverName] = useState("");
     const [plateNumber, setPlateNumber] = useState("");
-    const [vehicleModel, setVehicleModel] = useState("");
-    const [operator, setOperator] = useState("");
-    const [selectedRoute, setSelectedRoute] = useState("04A");
+    const [vehicleType, setVehicleType] = useState(VEHICLE_TYPE_OPTIONS[0]);
+    const [vehicleModel, setVehicleModel] = useState(VEHICLE_MODEL_OPTIONS[0]);
+    const [operator, setOperator] = useState(OPERATOR_OPTIONS[0]);
+    const [selectedRoute, setSelectedRoute] = useState(AVAILABLE_ROUTES[0]);
     const [sittingCapacity, setSittingCapacity] = useState("");
     const [standingCapacity, setStandingCapacity] = useState("");
-
+    const [speedLimit, setSpeedLimit] = useState("50");
     const [isEditing, setIsEditing] = useState(false);
     const [vehicleToEdit, setVehicleToEdit] = useState<ModernJeepney | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const loadVehicles = async () => {
+        try {
+            const response = await fetch("http://localhost:4000/api/jeepneys");
+            if (!response.ok) throw new Error("Failed to load vehicles");
+            const rawVehicles = await response.json();
+            const vehicles = rawVehicles.map(normalizeVehicle);
+            setRegisteredVehicles(vehicles);
+            setVehicleId(getNextVehicleId(vehicles));
+            return vehicles;
+        } catch (error) {
+           
+        }
+    };
 
     useEffect(() => {
-        setRegisteredVehicles(INITIAL_VEHICLES);
+        loadVehicles();
     }, []);
 
     const filteredVehicles = registeredVehicles.filter((v) => {
@@ -110,40 +93,119 @@ export default function ModernJeepneyRegistration() {
         return searchMatch && filterMatch;
     });
 
-    const clearForm = () => {
-        setVehicleId("");
+    const resetForm = (vehicles: ModernJeepney[]) => {
+        setVehicleId(getNextVehicleId(vehicles));
         setDriverName("");
         setPlateNumber("");
-        setVehicleModel("");
-        setOperator("");
-        setSelectedRoute("04A");
+        setVehicleType(VEHICLE_TYPE_OPTIONS[0]);
+        setVehicleModel(VEHICLE_MODEL_OPTIONS[0]);
+        setOperator(OPERATOR_OPTIONS[0]);
+        setSelectedRoute(AVAILABLE_ROUTES[0]);
         setSittingCapacity("");
         setStandingCapacity("");
+        setSpeedLimit("50");
         setIsEditing(false);
         setVehicleToEdit(null);
     };
 
-    const registerOrUpdateVehicle = (e: React.FormEvent) => {
+    const clearForm = () => resetForm(registeredVehicles);
+
+    const normalizeVehicle = (raw: any): ModernJeepney => ({
+        vehicleId: raw.vehicleId,
+        driverName: raw.driverName,
+        plateNumber: raw.plateNumber,
+        vehicleType: raw.vehicleType,
+        vehicleModel: raw.vehicleModel,
+        operator: raw.operator,
+        route: raw.routeName ?? raw.route ?? "",
+        sittingCapacity: raw.sittingCapacity,
+        standingCapacity: raw.standingCapacity,
+        speedLimit: raw.speedLimit,
+        registrationDate: raw.registrationDate,
+        status: raw.status === "ACTIVE" ? "Active" : raw.status === "INACTIVE" ? "Inactive" : raw.status,
+        violationCount: raw.violationCount,
+    });
+
+    const getNextVehicleId = (vehicles: ModernJeepney[]) => {
+        const numbers = vehicles.map((v) => parseInt(v.vehicleId.replace(/^MPUJ-0*/, ""), 10) || 0);
+        const nextNumber = Math.max(0, ...numbers) + 1;
+        return `MPUJ-${String(nextNumber).padStart(3, "0")}`;
+    };
+
+    const registerOrUpdateVehicle = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const sitting = parseInt(sittingCapacity, 10);
         const standing = parseInt(standingCapacity, 10);
+        const speed = parseInt(speedLimit, 10);
 
         if (isEditing && vehicleToEdit) {
             setRegisteredVehicles((prev) =>
                 prev.map((v) =>
                     v.vehicleId === vehicleToEdit.vehicleId
-                        ? { ...v, vehicleId, driverName, plateNumber, vehicleModel, operator, route: selectedRoute, sittingCapacity: sitting, standingCapacity: standing }
+                        ? { ...v, vehicleId, driverName, plateNumber, vehicleType, vehicleModel, operator, route: selectedRoute, sittingCapacity: sitting, standingCapacity: standing, speedLimit: speed }
                         : v
                 )
             );
-        } else {
-            const newVehicle: ModernJeepney = {
-                vehicleId, driverName, plateNumber, vehicleType: "Electric", vehicleModel, operator, route: selectedRoute,
-                sittingCapacity: sitting, standingCapacity: standing, registrationDate: new Date(), status: "Active", violationCount: 0,
-            };
-            setRegisteredVehicles((prev) => [newVehicle, ...prev]);
+            clearForm();
+            return;
         }
-        clearForm();
+
+        const newVehicle: ModernJeepney = {
+            vehicleId,
+            driverName,
+            plateNumber,
+            vehicleType,
+            vehicleModel,
+            operator,
+            route: selectedRoute,
+            sittingCapacity: sitting,
+            standingCapacity: standing,
+            speedLimit: speed,
+            registrationDate: new Date().toISOString(),
+            status: "Active",
+            violationCount: 0,
+        };
+
+        if (!window.confirm(`Register ${vehicleId} for route ${selectedRoute}?`)) {
+            return;
+        }
+
+        setIsSaving(true);
+        setErrorMessage(null);
+
+        try {
+            const response = await fetch("http://localhost:4000/api/jeepneys", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    vehicleId: newVehicle.vehicleId,
+                    driverName: newVehicle.driverName,
+                    plateNumber: newVehicle.plateNumber,
+                    vehicleType: newVehicle.vehicleType,
+                    vehicleModel: newVehicle.vehicleModel,
+                    operator: newVehicle.operator,
+                    routeName: newVehicle.route,
+                    sittingCapacity: newVehicle.sittingCapacity,
+                    standingCapacity: newVehicle.standingCapacity,
+                    speedLimit: newVehicle.speedLimit,
+                }),
+            });
+
+            if (!response.ok) {
+                const payload = await response.json();
+                throw new Error(payload?.error || "Failed to register vehicle");
+            }
+
+            const createdVehicle = normalizeVehicle(await response.json());
+            const updatedVehicles = [createdVehicle, ...registeredVehicles];
+            setRegisteredVehicles(updatedVehicles);
+            resetForm(updatedVehicles);
+            await loadVehicles();
+        } catch (error: any) {
+            setErrorMessage(error?.message || "Registration failed. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const toggleStatus = (id: string) => {
@@ -160,11 +222,13 @@ export default function ModernJeepneyRegistration() {
         setVehicleId(v.vehicleId);
         setDriverName(v.driverName);
         setPlateNumber(v.plateNumber);
+        setVehicleType(v.vehicleType);
         setVehicleModel(v.vehicleModel);
         setOperator(v.operator);
         setSelectedRoute(v.route);
         setSittingCapacity(v.sittingCapacity.toString());
         setStandingCapacity(v.standingCapacity.toString());
+        setSpeedLimit(v.speedLimit.toString());
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
@@ -192,23 +256,28 @@ export default function ModernJeepneyRegistration() {
 
                     <form onSubmit={registerOrUpdateVehicle} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <InputField label="Vehicle's ID" placeholder="MPUJ-XXX" value={vehicleId} onChange={(e: any) => setVehicleId(e.target.value.toUpperCase())} required />
-                            <InputField label="Driver's Name" placeholder="Enter driver's name" value={driverName} onChange={(e: any) => setDriverName(e.target.value)} required />
+                            <InputField label="Vehicle's ID" value={vehicleId} onChange={(e: any) => setVehicleId(e.target.value.toUpperCase())} required />
+                            <InputField label="Driver's Name" value={driverName} onChange={(e: any) => setDriverName(e.target.value)} required />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
-                            <InputField label="Plate Number" placeholder="JE-1234" value={plateNumber} onChange={(e: any) => setPlateNumber(e.target.value.toUpperCase())} maxLength={7} required />
+                            <InputField label="Plate Number" value={plateNumber} onChange={(e: any) => setPlateNumber(e.target.value.toUpperCase())} maxLength={7} required />
+                            <SelectField label="Vehicle Type" value={vehicleType} onChange={(e: any) => setVehicleType(e.target.value)} options={VEHICLE_TYPE_OPTIONS} />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <SelectField label="Vehicle Model" value={vehicleModel} onChange={(e: any) => setVehicleModel(e.target.value)} options={VEHICLE_MODEL_OPTIONS} />
+                            <SelectField label="Operator" value={operator} onChange={(e: any) => setOperator(e.target.value)} options={OPERATOR_OPTIONS} />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
                             <SelectField label="Route" value={selectedRoute} onChange={(e: any) => setSelectedRoute(e.target.value)} options={AVAILABLE_ROUTES} />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <InputField label="Vehicle Model" placeholder="Enter vehicle model" value={vehicleModel} onChange={(e: any) => setVehicleModel(e.target.value)} required />
-                            <InputField label="Operator" placeholder="Enter operator" value={operator} onChange={(e: any) => setOperator(e.target.value)} required />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <InputField label="Sitting Capacity" type="number" placeholder="20" value={sittingCapacity} onChange={(e: any) => setSittingCapacity(e.target.value.replace(/\D/g, ""))} required />
-                            <InputField label="Standing Capacity" type="number" placeholder="10" value={standingCapacity} onChange={(e: any) => setStandingCapacity(e.target.value.replace(/\D/g, ""))} required />
+                        <div className="grid grid-cols-3 gap-4">
+                            <InputField label="Sitting Capacity" type="number" value={sittingCapacity} onChange={(e: any) => setSittingCapacity(e.target.value.replace(/\D/g, ""))} required />
+                            <InputField label="Standing Capacity" type="number" value={standingCapacity} onChange={(e: any) => setStandingCapacity(e.target.value.replace(/\D/g, ""))} required />
+                            <InputField label="Speed Limit" type="number" value={speedLimit} onChange={(e: any) => setSpeedLimit(e.target.value.replace(/\D/g, ""))} required />
                         </div>
 
                         <div className="pt-6 flex gap-4">
@@ -308,17 +377,16 @@ const StatCard = ({ icon, label, value, colorClass, subLabel }: any) => (
     </div>
 );
 
-const InputField = ({ label, type = "text", placeholder, value, onChange, maxLength, required = false }: any) => (
+const InputField = ({ label, type = "text", value, onChange, maxLength, required = false }: any) => (
     <div className="flex flex-col">
         <label className="text-[13px] font-bold text-foreground/80 mb-1.5">{label}</label>
         <input
             type={type}
-            placeholder={placeholder}
             value={value}
             onChange={onChange}
             maxLength={maxLength}
             required={required}
-            className="px-4 py-3 bg-background border border-border-custom rounded-xl text-sm font-semibold text-foreground placeholder-foreground/30 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            className="px-4 py-3 bg-background border border-border-custom rounded-xl text-sm font-semibold text-foreground focus:ring-2 focus:ring-blue-500 outline-none transition-all"
         />
     </div>
 );

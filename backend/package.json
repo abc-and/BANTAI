@@ -1,0 +1,27 @@
+{
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.7.0",
+    "@prisma/client": "^7.7.0",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.103.0",
+    "bcryptjs": "^2.4.3",
+    "next": "^16.2.3",
+    "pg": "^8.20.0"
+  },
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "tsx server.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "seed:admin": "tsx seed-admin.ts"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
+    "dotenv": "^16.3.1",
+    "prisma": "^7.7.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0"
+  }
+}

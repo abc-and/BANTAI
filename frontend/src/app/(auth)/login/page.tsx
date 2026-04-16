@@ -21,22 +21,26 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     setError('');
 
-    // Matches your Flutter 2-second delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
 
-    if (username === 'admin' && password === 'bantai2026') {
-      login("mock-token", {
-          id: "1",
-          email: "admin@bantai.ai",
-          firstName: "Admin",
-          lastName: "User",
-          role: "ADMIN",
-          isActive: true,
-          createdAt: new Date().toISOString()
+    try {
+      const response = await fetch(`${backendUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
       });
-    } else {
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Invalid username or password');
+      }
+
+      login(data.token, data.user);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Login failed');
       setIsLoading(false);
-      setError('Invalid username or password');
     }
   };
 
