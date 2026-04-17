@@ -107,6 +107,7 @@ export default function ViolationsManagement({
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState<ViolationType | "All">("All");
     const [selectedViolation, setSelectedViolation] = useState<Violation | null>(null);
+    const [snapshotViolation, setSnapshotViolation] = useState<Violation | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [resolveConfirm, setResolveConfirm] = useState<Violation | null>(null);
 
@@ -164,6 +165,7 @@ export default function ViolationsManagement({
             )
         );
         setSelectedViolation(null);
+        setSnapshotViolation(null);
         setResolveConfirm(null);
         onUpdate?.();
     };
@@ -269,70 +271,77 @@ export default function ViolationsManagement({
     };
 
     return (
-        <div className={`flex flex-col h-full transition-colors duration-300 ${t("bg-[#0f172a]", "bg-slate-50")}`}>
+        <div className={`flex h-full transition-colors duration-300 ${t("bg-[#0f172a]", "bg-slate-50")}`}>
             {/* Main panel */}
             <div className="flex flex-col flex-1 min-w-0">
-                {/* Header */}
-                <div className={`px-6 py-5 flex items-center gap-4 shadow-md transition-all duration-300 ${t("bg-linear-to-r from-blue-900 to-indigo-900", "bg-linear-to-r from-blue-700 to-blue-500")}`}>
-                    <div className="bg-white/20 rounded-2xl p-3 backdrop-blur-md">
-                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <h1 className="text-white text-2xl font-black tracking-tight uppercase">Violations Management</h1>
-                        <p className="text-blue-100 text-sm font-medium">Generate formal incident reports and manage verified violations</p>
+
+                {/* ✅ NEW HEADER (CENTERED, NO BLUE) */}
+                <div className={`px-4 border-b ${t("bg-[#0f172a] border-slate-800", "bg-white border-slate-200")}`}>
+                    <div className="max-w-[1600px] mx-auto py-6 flex flex-col items-center justify-center text-center">
+                        <h1 className={`text-xl font-black tracking-tight uppercase ${t("text-white", "text-slate-800")}`}>
+                            Violations Management
+                        </h1>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest ${t("text-slate-400", "text-slate-500")}`}>
+                            Verified Incidents & Report Generation
+                        </p>
                     </div>
                 </div>
 
-                {/* Stats bar */}
+                {/* Stats bar (UNCHANGED) */}
                 <div className={`border-b px-4 py-3 grid grid-cols-3 gap-3 transition-colors duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-slate-100 border-slate-200")}`}>
-                    <StatChip isDark={isDark} label="Total Verified" count={totalVerified} color="blue" icon={
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    } />
-                    <StatChip isDark={isDark} label="Overcapacity" count={totalOverload} color="red" icon={
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    } />
-                    <StatChip isDark={isDark} label="Overspeeding" count={totalOverspeed} color="orange" icon={
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    } />
+                    <StatChip isDark={isDark} label="Total Verified" count={totalVerified} color="blue" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />} />
+                    <StatChip isDark={isDark} label="Overcapacity" count={totalOverload} color="red" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />} />
+                    <StatChip isDark={isDark} label="Overspeeding" count={totalOverspeed} color="orange" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />} />
                 </div>
 
-                {/* Control bar */}
+                {/* ✅ UPDATED CONTROL BAR */}
                 <div className={`border-b px-4 py-3 flex items-center gap-3 transition-colors duration-300 ${t("bg-[#1e293b]/50 border-slate-700", "bg-white border-slate-200")}`}>
-                    <div className="relative flex-1 max-w-xs">
-                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        <input
-                            type="text"
-                            placeholder="Search violations..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className={`w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${t("bg-slate-800 border-slate-700 text-white placeholder-slate-500", "bg-slate-50 border-slate-300 text-slate-800 placeholder-slate-400")}`}
-                        />
+
+                    {/* LEFT */}
+                    <div className="flex items-center gap-3 flex-1">
+                        <div className="relative flex-1 max-w-xs">
+                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Search by Plate, Operator or Location..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className={`w-full pl-9 pr-3 py-2.5 border rounded-xl text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${t("bg-slate-800 border-slate-700 text-white placeholder-slate-500", "bg-slate-50 border-slate-300 text-slate-800 placeholder-slate-400")}`}
+                            />
+                        </div>
+
+                        <select
+                            value={typeFilter}
+                            onChange={(e) => setTypeFilter(e.target.value as ViolationType | "All")}
+                            className={`border rounded-xl px-4 py-2.5 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-slate-50 border-slate-300 text-slate-800")}`}
+                        >
+                            <option value="All">All Violation Types</option>
+                            <option value={ViolationType.overload}>Overcapacity Only</option>
+                            <option value={ViolationType.overspeed}>Overspeeding Only</option>
+                        </select>
                     </div>
 
-                    <select
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value as ViolationType | "All")}
-                        className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-slate-50 border-slate-300 text-slate-800")}`}
-                    >
-                        <option value="All">All Types</option>
-                        <option value={ViolationType.overload}>Overcapacity</option>
-                        <option value={ViolationType.overspeed}>Overspeeding</option>
-                    </select>
+                    {/* RIGHT (MOVED HERE) */}
+                    <div className="flex items-center gap-4 ml-auto">
+                        <div className="flex flex-col items-end">
+                            <span className="text-slate-400 text-[8px] font-black uppercase tracking-widest">
+                                Selected Items
+                            </span>
+                            <span className={`text-sm font-black ${t("text-white", "text-slate-800")}`}>
+                                {selectedIds.size}
+                            </span>
+                        </div>
 
-                    <button
-                        onClick={exportSelected}
-                        disabled={selectedIds.size === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-800/50 disabled:text-slate-500 disabled:border-slate-700 disabled:cursor-not-allowed border border-blue-500/20 text-white text-sm font-bold rounded-lg transition-all active:scale-95 shadow-lg shadow-blue-500/10"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        Generate Reports ({selectedIds.size})
-                    </button>
+                        <button
+                            onClick={exportSelected}
+                            disabled={selectedIds.size === 0}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-[10px] font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-lg"
+                        >
+                            Batch Export
+                        </button>
+                    </div>
                 </div>
 
                 {/* Table Area */}
@@ -355,7 +364,7 @@ export default function ViolationsManagement({
                             <div className="text-center">Type</div>
                             <div>Location</div>
                             <div className="text-center">Time</div>
-                            <div>Actions</div>
+                            <div className="text-center">Actions</div>
                         </div>
 
                         {/* Table body */}
@@ -373,14 +382,15 @@ export default function ViolationsManagement({
                             ) : (
                                 filteredViolations.map((v) => {
                                     const isOverload = v.type === ViolationType.overload;
-                                    const isRowSelected = selectedViolation?.id === v.id;
+                                    const isRowSelected = snapshotViolation?.id === v.id;
+                                    const isBadgeSelected = selectedViolation?.id === v.id;
                                     const isChecked = selectedIds.has(v.id);
 
                                     return (
                                         <div
                                             key={v.id}
-                                            onClick={() => setSelectedViolation(v)}
-                                            className={`grid grid-cols-[36px_1fr_80px_140px_70px_110px_1fr_90px_80px] gap-0 px-3 py-3 border-b transition-all duration-200 cursor-pointer ${t("border-slate-800 hover:bg-slate-800/40", "border-slate-100 hover:bg-slate-50")} ${isRowSelected ? t("bg-blue-900/40 border-l-4 border-l-blue-500 pl-2", "bg-blue-50 shadow-inner") : ""}`}
+                                            onClick={() => setSnapshotViolation(v)}
+                                            className={`grid grid-cols-[36px_1fr_80px_140px_70px_110px_1fr_90px_80px] gap-0 px-3 py-3 border-b transition-all duration-200 cursor-pointer ${t("border-slate-800 hover:bg-slate-800/40", "border-slate-100 hover:bg-slate-50")} ${isRowSelected ? t("bg-blue-900/40 border-l-4 border-l-blue-500 pl-2", "bg-blue-50 shadow-inner") : ""} ${isBadgeSelected ? "ring-2 ring-blue-500 ring-inset" : ""}`}
                                         >
                                             <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                                                 <input
@@ -399,9 +409,16 @@ export default function ViolationsManagement({
                                                 <span className={`px-2 py-1 text-[10px] font-bold rounded truncate max-w-[58px] ${t("bg-blue-900/20 text-blue-400 border border-blue-800/50", "bg-blue-100 text-blue-700")}`}>{v.route}</span>
                                             </div>
                                             <div className="flex items-center justify-center">
-                                                <span className={`flex items-center gap-1 px-2 py-1 text-[9px] font-bold rounded border uppercase ${isOverload ? t("bg-rose-900/30 text-rose-400 border-rose-800/50", "bg-red-50 text-red-600 border-red-200") : t("bg-amber-900/30 text-amber-500 border-amber-800/50", "bg-orange-50 text-orange-600 border-orange-200")}`}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedViolation(v);
+                                                    }}
+                                                    className={`hover:scale-105 active:scale-95 transition-all flex items-center gap-1 px-2 py-1 text-[9px] font-black rounded border uppercase ${isOverload ? t("bg-rose-900/30 text-rose-400 border-rose-800/50 hover:bg-rose-900/50", "bg-red-50 text-red-600 border-red-200 hover:bg-red-100") : t("bg-amber-900/30 text-amber-500 border-amber-800/50 hover:bg-amber-900/50", "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100")}`}
+                                                    title="Open Ticket"
+                                                >
                                                     {isOverload ? "Overload" : "Overspeed"}
-                                                </span>
+                                                </button>
                                             </div>
                                             <div className={`flex items-center gap-1 text-[10px] font-medium truncate pr-2 ${t("text-slate-400", "text-slate-600")}`}>
                                                 <svg className="w-2.5 h-2.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,24 +427,17 @@ export default function ViolationsManagement({
                                                 {v.location.split(",")[0]}
                                             </div>
                                             <div className={`flex items-center justify-center text-[10px] font-bold ${t("text-slate-500", "text-slate-500")}`}>{format(v.timestamp, "MM/dd HH:mm")}</div>
-                                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                                                 <button
-                                                    onClick={() => setSelectedViolation(v)}
-                                                    className={`p-1 rounded transition-all ${t("text-indigo-400 hover:bg-slate-700", "text-blue-600 hover:bg-blue-50")}`}
-                                                    title="View details"
+                                                    onClick={() => setSnapshotViolation(v)}
+                                                    className={`p-1.5 rounded-lg transition-all hover:scale-110 active:scale-95 ${t("text-indigo-400 hover:bg-slate-700", "text-blue-600 hover:bg-blue-50")}`}
+                                                    title="View Snapshot"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                                     </svg>
                                                 </button>
-                                                {v.repeatOffenseCount > 2 && (
-                                                    <div className={`p-1 rounded-full ${t("bg-rose-900/30", "bg-red-100")}`} title="Repeat offender">
-                                                        <svg className="w-3 h-3 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                        </svg>
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
                                     );
@@ -438,7 +448,17 @@ export default function ViolationsManagement({
                 </div>
             </div>
 
-            {/* Details panel */}
+            {/* Snapshot Sidebar */}
+            {snapshotViolation && (
+                <SnapshotPanel
+                    violation={snapshotViolation}
+                    onClose={() => setSnapshotViolation(null)}
+                    onUpdate={markAsResolved}
+                    isDark={isDark}
+                />
+            )}
+
+            {/* Ticket Modal */}
             {selectedViolation && (
                 <DetailsPanel
                     isDark={isDark}
@@ -451,8 +471,8 @@ export default function ViolationsManagement({
 
             {/* Resolve confirmation dialog */}
             {resolveConfirm && (
-                <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className={`rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-colors duration-300 ${t("bg-[#1e293b] border border-slate-700", "bg-white")}`}>
+                <div className="fixed inset-0 bg-slate-900/60 z-[3000] flex items-center justify-center backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className={`rounded-3xl p-8 w-full max-w-sm shadow-2xl scale-in-center ${t("bg-slate-900 border border-slate-700", "bg-white")}`}>
                         <div className="flex items-center gap-4 mb-4">
                             <div className={`p-3 rounded-2xl ${t("bg-emerald-900/30 text-emerald-400 border border-emerald-900/50", "bg-green-100 text-green-600")}`}>
                                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -480,7 +500,196 @@ export default function ViolationsManagement({
     );
 }
 
-// ─── Stat Chip ────────────────────────────────────────────────────────────────
+// ─── Snapshot Sidebar Panel ───────────────────────────────────────────────────
+
+function SnapshotPanel({
+    violation: v,
+    onClose,
+    onUpdate,
+    isDark
+}: {
+    violation: Violation;
+    onClose: () => void;
+    onUpdate: (v: Violation) => void;
+    isDark: boolean
+}) {
+    const t = (dark: string, light: string) => (isDark ? dark : light);
+    const isOverload = v.type === ViolationType.overload;
+
+    return (
+        <div className={`w-[360px] shrink-0 border-l flex flex-col shadow-2xl transition-all duration-300 animate-in slide-in-from-right ${t("bg-slate-900 border-slate-800", "bg-white border-slate-200")}`}>
+            <div className={`px-6 py-6 flex items-center justify-between border-b ${t("border-slate-800", "border-slate-100")}`}>
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${isOverload ? t("bg-rose-500/20 text-rose-500", "bg-red-50 text-red-600") : t("bg-amber-500/20 text-amber-500", "bg-orange-50 text-orange-600")}`}>
+                        <AlertTriangle className="w-5 h-5" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                        <h3 className={`text-sm font-black uppercase tracking-widest ${t("text-white", "text-slate-800")}`}>Infraction Snapshot</h3>
+                        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tighter">{v.id}</p>
+                    </div>
+                </div>
+                <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                    <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Incident Details</h4>
+                    <div className={`p-4 rounded-2xl space-y-2 ${t("bg-slate-800/40", "bg-slate-50")}`}>
+                        <MetricRow isDark={isDark} label="Unit ID" value={v.unitId} bold />
+                        <MetricRow isDark={isDark} label="Time" value={format(v.timestamp, "hh:mm a")} />
+                        <MetricRow isDark={isDark} label="Location" value={v.location.split(',')[0]} />
+                        <MetricRow isDark={isDark} label="Operator" value={v.operator} />
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Infraction Metrics</h4>
+                    <div className={`p-4 rounded-2xl space-y-2 ${t("bg-slate-800/40", "bg-slate-50")}`}>
+                        {isOverload ? (
+                            <>
+                                <MetricRow isDark={isDark} label="Passenger Count" value={`${v.details.passengers} pax`} bold accent="text-rose-500" />
+                                <MetricRow isDark={isDark} label="Capacity Limit" value={`${v.details.capacity} pax`} />
+                            </>
+                        ) : (
+                            <>
+                                <MetricRow isDark={isDark} label="Detected Speed" value={`${v.details.speed} km/h`} bold accent="text-amber-500" />
+                                <MetricRow isDark={isDark} label="Speed Limit" value={`${v.details.limit} km/h`} />
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <button
+                    onClick={() => onUpdate(v)}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest"
+                >
+                    <ShieldCheck className="w-5 h-5" strokeWidth={2.5} />
+                    Mark as Resolved
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Details Modal Panel ──────────────────────────────────────────────────────
+
+function DetailsPanel({
+    violation: v,
+    onClose,
+    onGenerateReport,
+    onMarkResolved,
+    isDark
+}: {
+    violation: Violation;
+    onClose: () => void;
+    onGenerateReport: (v: Violation) => void;
+    onMarkResolved: (v: Violation) => void;
+    isDark: boolean
+}) {
+    const t = (dark: string, light: string) => (isDark ? dark : light);
+    const isOverload = v.type === ViolationType.overload;
+
+    const headerText = isOverload ? t("text-rose-400", "text-red-500") : t("text-amber-500", "text-orange-500 font-bold");
+    const headerIconBg = isOverload ? t("bg-rose-500/20", "bg-red-50") : t("bg-amber-500/20", "bg-orange-50");
+
+    const excess = isOverload
+        ? (v.details.passengers ?? 0) - (v.details.capacity ?? 0)
+        : (v.details.speed ?? 0) - (v.details.limit ?? 0);
+
+    return (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 p-4">
+            <div className={`w-full max-w-[480px] rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 ${t("bg-slate-900", "bg-white")}`}>
+                {/* Header */}
+                <div className={`px-8 py-8 flex items-start justify-between border-b ${t("border-slate-800", "border-slate-100")}`}>
+                    <div className="flex items-center gap-5">
+                        <div className={`${headerIconBg} p-4 rounded-[24px] shadow-sm border ${t("border-rose-500/20", "border-red-100")}`}>
+                            <svg className={`w-10 h-10 ${headerText}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={isOverload ? "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1" : "M13 10V3L4 14h7v7l9-11h-7z"} />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 className={`text-2xl font-black tracking-tight leading-none ${t("text-white", "text-slate-800 uppercase")}`}>{isOverload ? "Overload" : "Overspeeding"}</h2>
+                            <p className="text-slate-400 text-sm font-medium mt-2">{format(v.timestamp, "MMMM dd, yyyy 'at' hh:mm a")}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-2 rounded-full transition-colors hover:bg-slate-100 dark:hover:bg-slate-800">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-8 space-y-6">
+
+                    {/* Metrics Grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className={`p-5 rounded-2xl border ${t("bg-slate-800/40 border-slate-700/50", "bg-slate-50 border-slate-100")}`}>
+                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-2">Plate Number</p>
+                            <p className={`text-xl font-black ${t("text-white", "text-slate-800")}`}>{v.unitId}</p>
+                        </div>
+                        <div className={`p-5 rounded-2xl border ${t("bg-slate-800/40 border-slate-700/50", "bg-slate-50 border-slate-100")}`}>
+                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-2">
+                                {isOverload ? "Capacity Info" : "Detected Speed"}
+                            </p>
+                            <p className={`text-xl font-black ${t("text-white", "text-slate-800")}`}>
+                                {isOverload ? `${v.details.passengers}/${v.details.capacity}` : `${v.details.speed} km/h`}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Location Box */}
+                    <div className={`p-5 rounded-2xl border ${t("bg-slate-800/40 border-slate-700/50", "bg-slate-50 border-slate-100")}`}>
+                        <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-2">Location</p>
+                        <div className="flex items-center gap-3">
+                            <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shadow-sm">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /></svg>
+                            </div>
+                            <p className={`text-base font-bold ${t("text-slate-200", "text-slate-700")}`}>{v.location}</p>
+                        </div>
+                    </div>
+
+                    {/* Additional Sub-details */}
+                    <div className="flex items-center justify-between px-2 pt-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse"></div>
+                            <span className="text-xs font-black text-amber-600 uppercase tracking-widest italic">{v.status}</span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-400 tracking-tighter">ID: {v.id}</p>
+                    </div>
+
+                    {/* Action buttons matching image style */}
+                    <div className="flex gap-4 pt-6">
+                        <button
+                            onClick={() => onMarkResolved(v)}
+                            className="flex-1 h-14 bg-[#10b981] hover:bg-[#059669] text-white font-black rounded-2xl transition-all shadow-xl shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2 text-sm"
+                        >
+                            Verify Violation
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="flex-1 h-14 bg-[#1e293b] hover:bg-[#0f172a] text-white font-black rounded-2xl transition-all shadow-xl shadow-slate-900/20 active:scale-95 flex items-center justify-center gap-2 text-sm"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+
+                    {/* Report link */}
+                    <button
+                        onClick={() => onGenerateReport(v)}
+                        className="w-full text-center text-slate-400 hover:text-blue-500 text-[10px] font-black uppercase tracking-widest pt-2 transition-colors"
+                    >
+                        Generate Formal Incident PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Shared Components ────────────────────────────────────────────────────────
 
 function StatChip({ label, count, color, icon, isDark }: { label: string; count: number; color: "blue" | "red" | "orange"; icon: React.ReactNode; isDark: boolean }) {
     const t = (dark: string, light: string) => (isDark ? dark : light);
@@ -499,178 +708,6 @@ function StatChip({ label, count, color, icon, isDark }: { label: string; count:
             <div>
                 <div className={`text-2xl font-black leading-none tracking-tight ${colors.text}`}>{count}</div>
                 <div className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${colors.sub}`}>{label}</div>
-            </div>
-        </div>
-    );
-}
-
-// ─── Details Panel ────────────────────────────────────────────────────────────
-
-function DetailsPanel({
-    violation: v,
-    onClose,
-    onGenerateReport,
-    onMarkResolved,
-    isDark
-}: {
-    violation: Violation;
-    onClose: () => void;
-    onGenerateReport: (v: Violation) => void;
-    onMarkResolved: (v: Violation) => void;
-    isDark: boolean
-}) {
-    const t = (dark: string, light: string) => (isDark ? dark : light);
-    const isOverload = v.type === ViolationType.overload;
-
-    const headerBg = isOverload
-        ? t("from-rose-900 to-rose-700", "from-red-600 to-red-500")
-        : t("from-amber-900 to-amber-700", "from-orange-500 to-orange-400");
-
-    const accentBg = isOverload
-        ? t("bg-rose-900/20 border-rose-900/30", "bg-red-50 border-red-200")
-        : t("bg-amber-900/20 border-amber-900/30", "bg-orange-50 border-orange-200");
-
-    const accentText = isOverload ? t("text-rose-400", "text-red-700") : t("text-amber-500", "text-orange-700");
-    const accentIcon = isOverload ? t("text-rose-500", "text-red-500") : t("text-amber-500", "text-orange-500");
-
-    const excess = isOverload
-        ? (v.details.passengers ?? 0) - (v.details.capacity ?? 0)
-        : (v.details.speed ?? 0) - (v.details.limit ?? 0);
-
-    return (
-        <div className={`w-[420px] shrink-0 border-l-2 flex flex-col shadow-2xl transition-all duration-300 ${t("bg-[#1e293b] border-slate-800", "bg-white border-slate-200")}`}>
-            {/* Panel header */}
-            <div className={`bg-linear-to-r ${headerBg} px-6 py-6 flex items-center gap-4 shadow-lg`}>
-                <div className="bg-white/20 p-2.5 rounded-xl backdrop-blur-md border border-white/20 shadow-inner">
-                    <svg className="w-7 h-7 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={isOverload ? "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1" : "M13 10V3L4 14h7v7l9-11h-7z"} />
-                    </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                    <div className="text-white font-black text-lg tracking-tight uppercase leading-tight">{isOverload ? "Overload" : "Overspeed"}</div>
-                    <div className="text-white/70 text-[10px] font-bold tracking-widest uppercase mt-0.5">Verified Violation</div>
-                </div>
-                <button onClick={onClose} className="text-white/60 hover:text-white p-1 rounded-xl transition-colors hover:bg-white/10 active:scale-95">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Info card */}
-                <div className={`rounded-2xl border p-5 space-y-5 transition-colors duration-300 ${t("bg-slate-800/40 border-slate-700 shadow-inner", "bg-slate-50 border-slate-200")}`}>
-                    {[
-                        { icon: "M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4", label: "Ticket ID", value: v.id, isMono: true },
-                        { icon: "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4", label: "Unit ID", value: v.unitId, isBadge: true },
-                        { icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4", label: "Operator", value: v.operator },
-                        { icon: "M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7", label: "Route", value: v.route },
-                        { icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z", label: "Violation Area", value: v.location },
-                        { icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", label: "Timestamp", value: format(v.timestamp, "MMMM dd, yyyy HH:mm") },
-                    ].map(({ icon, label, value, isMono, isBadge }) => (
-                        <div key={label} className="flex items-start gap-4">
-                            <div className={`p-1.5 rounded-lg border transition-colors ${t("bg-slate-700/50 border-slate-600 text-slate-500", "bg-white border-slate-200 text-slate-400")}`}>
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={icon} />
-                                </svg>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="text-[9px] font-black text-slate-500 uppercase tracking-[0.15em] mb-1">{label}</div>
-                                {isBadge ? (
-                                    <span className={`px-2 py-0.5 rounded-md text-xs font-black border transition-colors ${t("bg-indigo-900/30 text-indigo-400 border-indigo-800/50", "bg-blue-900/10 text-blue-900 border-blue-900/20")}`}>{value}</span>
-                                ) : (
-                                    <div className={`text-sm font-bold wrap-break-word transition-colors ${isMono ? "font-mono tracking-wider" : ""} ${t("text-slate-200", "text-slate-800")}`}>{value}</div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Violation details card */}
-                <div className={`rounded-2xl border-2 p-5 shadow-lg shadow-black/5 ${accentBg}`}>
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className={`p-2.5 rounded-xl shadow-inner border ${isOverload ? t("bg-rose-900/40 border-rose-800/50", "bg-red-100 border-red-200") : t("bg-amber-900/40 border-amber-800/50", "bg-orange-100 border-orange-200")}`}>
-                            <svg className={`w-5 h-5 ${accentIcon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={isOverload ? "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1" : "M13 10V3L4 14h7v7l9-11h-7z"} />
-                            </svg>
-                        </div>
-                        <span className={`text-xs font-black tracking-widest uppercase ${accentText}`}>
-                            {isOverload ? "Infraction Snapshot" : "Detection Log"}
-                        </span>
-                    </div>
-                    <div className={`border-t border-dashed mb-4 ${isOverload ? "border-rose-300/30" : "border-amber-300/30"}`} />
-
-                    <div className="space-y-3">
-                        {isOverload ? (
-                            <>
-                                <MetricRow isDark={isDark} label="Full Capacity" value={`${v.details.capacity} pax`} />
-                                <MetricRow isDark={isDark} label="Occupancy Count" value={`${v.details.passengers} pax`} bold accent={accentText} />
-                            </>
-                        ) : (
-                            <>
-                                <MetricRow isDark={isDark} label="Regulatory Limit" value={`${v.details.limit} kph`} />
-                                <MetricRow isDark={isDark} label="Detected Velocity" value={`${v.details.speed} kph`} bold accent={accentText} />
-                            </>
-                        )}
-                    </div>
-
-                    <div className={`mt-5 p-4 rounded-xl shadow-inner border animate-pulse ${isOverload ? "bg-rose-900/40 border-rose-800/50" : "bg-amber-900/40 border-amber-800/50"}`}>
-                        <div className="flex items-center gap-3">
-                            <AlertTriangle className={`w-5 h-5 ${accentIcon} shrink-0`} strokeWidth={2.5} />
-                            <div>
-                                <div className={`text-[9px] font-black uppercase tracking-widest ${accentText}`}>{isOverload ? "NET OVER CAPACITY" : "SPEED EXCEEDANCE"}</div>
-                                <div className={`text-sm font-black mt-0.5 ${accentText}`}>
-                                    +{excess} {isOverload ? "passengers" : "km/h"} detected
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Repeat offender */}
-                {v.repeatOffenseCount > 0 && (
-                    <div className={`rounded-2xl p-5 flex items-center gap-5 border-2 shadow-lg shadow-rose-900/10 ${t("bg-rose-900/20 border-rose-800/60", "bg-red-50 border-red-300")}`}>
-                        <div className={`p-2.5 rounded-xl border ${t("bg-rose-900/40 border-rose-800/50 text-rose-400", "bg-red-100 border-red-200 text-red-600")}`}>
-                            <AlertTriangle className="w-7 h-7 shrink-0" strokeWidth={3} />
-                        </div>
-                        <div>
-                            <div className="text-sm font-black tracking-tight text-rose-500 uppercase">Repeat Offender</div>
-                            <div className={`text-xs font-bold mt-1 ${t("text-rose-300/70", "text-red-600")}`}>{v.repeatOffenseCount} prior infractions documented</div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Evidence Photo */}
-                <div className={`h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700 text-slate-600 hover:border-blue-500/50 hover:text-blue-500", "bg-slate-50 border-slate-300 text-slate-400 hover:border-blue-500/50")}`}>
-                    <div className="p-4 rounded-2xl bg-white/5 backdrop-blur-sm mb-3">
-                        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">Secondary Evidence Snapshot</span>
-                </div>
-
-                {/* Action buttons */}
-                <div className="space-y-3 pt-4">
-                    <button
-                        onClick={() => onGenerateReport(v)}
-                        className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all duration-300 shadow-xl shadow-indigo-600/20 active:scale-95 uppercase text-xs tracking-widest"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        Generate Formal Report
-                    </button>
-                    <button
-                        onClick={() => onMarkResolved(v)}
-                        className={`w-full flex items-center justify-center gap-3 px-6 py-4 font-black rounded-2xl transition-all duration-300 active:scale-95 uppercase text-xs tracking-widest ${t("bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-600 hover:text-white", "bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-600 hover:text-white")}`}
-                    >
-                        <ShieldCheck className="w-5 h-5" strokeWidth={2.5} />
-                        Mark as Resolved
-                    </button>
-                </div>
             </div>
         </div>
     );

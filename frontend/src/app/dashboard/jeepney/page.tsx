@@ -68,7 +68,7 @@ export default function ModernJeepneyRegistration() {
             setVehicleId(getNextVehicleId(vehicles));
             return vehicles;
         } catch (error) {
-           
+
         }
     };
 
