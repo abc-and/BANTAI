@@ -1,4 +1,3 @@
-// app/admin/login/page.tsx
 "use client";
 
 import React, { useState } from 'react';
@@ -8,103 +7,173 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+
+  // State management
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [logoError, setLogoError] = useState(false);
+
+  const { login: authLogin } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
-
     try {
-      const response = await fetch(`${backendUrl}/api/auth/login`, {
+      const response = await fetch('http://localhost:4000/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
 
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Invalid username or password');
-      }
+      if (!response.ok) throw new Error(data.error || 'Login failed');
 
-      login(data.token, data.user);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Login failed');
+      authLogin(data.token, data.user);
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred.');
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-[#F9FAFB] overflow-hidden">
-      <div className="absolute inset-0 bg-linear-to-br from-blue-600/5 to-[#143054]/10 pointer-events-none" />
+    <div className="h-screen w-full flex bg-[#FDFDFD] overflow-hidden font-sans">
 
-      <div className="relative w-full max-w-[480px] p-5 z-10">
-        <div className="bg-white rounded-[24px] shadow-2xl p-8 md:p-10">
+      {/* ================= LEFT SIDE: STABLE BG + ICON ONLY BACK ================= */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-16">
+
+        {/* MINIMALIST ICON BACK BUTTON */}
+        <button
+          onClick={() => router.push('/')}
+          className="absolute top-10 left-10 z-20 flex items-center justify-center w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white hover:bg-white/30 transition-all group shadow-2xl"
+        >
+          <span className="material-icons text-2xl group-hover:-translate-x-1 transition-transform">arrow_back</span>
+        </button>
+
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/modjep.jpg"
+            alt="Background"
+            fill
+            priority
+            quality={100}
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-[#0f213a]/55" />
+        </div>
+
+        {/* Content pushed down slightly to avoid overlap with the back button */}
+        <div className="relative z-10 mt-16">
+          <div className="flex items-center gap-4 mb-12">
+            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20 shadow-xl">
+              <span className="material-icons text-blue-400 text-2xl">directions_bus</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-black tracking-[0.25em] text-white uppercase leading-none">MPUJ MONITORING SYSTEM</h2>
+              <p className="text-blue-400/80 text-[10px] font-bold tracking-widest mt-1 uppercase">Public Transport Office</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-4 text-white/70 text-sm py-4 px-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 w-fit">
+          <span className="material-icons text-blue-400">verified_user</span>
+          <p className="font-medium tracking-tight">Authorized Personnel Only. Access is securely monitored.</p>
+        </div>
+      </div>
+
+      {/* ================= RIGHT SIDE: LOGIN FORM ================= */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white relative">
+        <div className="w-full max-w-[420px] bg-white rounded-[40px] shadow-[0_32px_64px_-16px_rgba(15,33,58,0.12)] border border-gray-100 p-10 relative z-10 transition-all hover:shadow-[0_40px_80px_-16px_rgba(15,33,58,0.16)]">
           <form onSubmit={handleLogin} className="flex flex-col items-center">
 
-            <div className="h-[130px] flex items-center justify-center mb-2">
-              {!logoError ? (
-                <Image src="/bantai_logo.png" alt="Logo" width={120} height={120} priority onError={() => setLogoError(true)} />
-              ) : (
-                <div className="w-[120px] h-[120px] bg-linear-to-r from-blue-700 to-blue-500 rounded-full flex items-center justify-center text-white"><span className="material-icons text-6xl">smart_toy</span></div>
-              )}
+            {/* Logo Section */}
+            <div className="relative w-48 h-48 -mb-8 drop-shadow-[0_20px_20px_rgba(0,0,0,0.15)] transition-transform duration-500">
+              <Image src="/icon.png" alt="BANT.AI Logo" fill priority className="object-contain" />
             </div>
 
-            <h1 className="text-[#143054] text-3xl font-bold">Admin Access</h1>
-            <p className="text-gray-500 text-sm mt-1">Secure administration portal</p>
-
-            {error && <div className="mt-4 w-full p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg text-center font-medium">{error}</div>}
-
-            <div className="mt-8 w-full space-y-4">
-              <div className="relative">
-                {/* Made icon darker: text-gray-700 */}
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 material-icons">person_outline</span>
-                {/* Made text darker: text-gray-900 */}
-                <input type="text" placeholder="Username" disabled={isLoading} className="w-full pl-12 pr-4 py-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-600 outline-none text-gray-900" value={username} onChange={(e) => setUsername(e.target.value)} required />
+            {/* Header Section */}
+            <div className="text-center mb-10 pt-0">
+              <h1 className="text-4xl font-[900] tracking-tighter text-[#0f213a] mb-2">
+                Login
+              </h1>
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <div className="h-1 w-2 bg-blue-600 rounded-full" />
+                <div className="h-1 w-8 bg-blue-600 rounded-full" />
+                <div className="h-1 w-2 bg-blue-600 rounded-full" />
               </div>
-
-              <div className="relative">
-                {/* Made icon darker: text-gray-700 */}
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 material-icons">lock_outline</span>
-                {/* Made text darker: text-gray-900 */}
-                <input type={isPasswordVisible ? 'text' : 'password'} placeholder="Password" disabled={isLoading} className="w-full pl-12 pr-12 py-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-600 outline-none text-gray-900" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                <button type="button" onClick={() => setIsPasswordVisible(!isPasswordVisible)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-700"><span className="material-icons">{isPasswordVisible ? 'visibility_off' : 'visibility'}</span></button>
-              </div>
-
-              <button type="submit" disabled={isLoading} className="w-full h-[50px] bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold tracking-wider transition-all disabled:opacity-50">LOGIN TO ADMIN DASHBOARD</button>
-
-              <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-gray-700">
-                <span className="material-icons text-amber-500 text-[18px]">security</span>
-                <p className="text-[12px] font-medium">Restricted area. All access is logged.</p>
-              </div>
+              <p className="text-gray-400 text-[10px] font-black tracking-[0.3em] uppercase">
+                Management Portal
+              </p>
             </div>
 
-            <footer className="mt-8 text-center text-gray-400 text-[10px]">
-              <p className="font-medium text-gray-500">© 2026 BANT.AI - MANDAUE CITY GOVERNMENT</p>
-              <p>Public Transport Regulation Office</p>
+            {error && (
+              <div className="mb-6 w-full p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-xs font-bold rounded-xl">
+                <div className="flex items-center gap-2">
+                  <span className="material-icons text-sm">error</span>
+                  {error}
+                </div>
+              </div>
+            )}
+
+            <div className="w-full space-y-4">
+              <div className="relative group">
+                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 material-icons text-xl group-focus-within:text-blue-600 transition-colors duration-300">person</span>
+                <input
+                  type="text"
+                  placeholder="Username"
+                  className="w-full pl-14 pr-5 py-5 bg-gray-50/50 border border-gray-200 rounded-[22px] focus:bg-white focus:ring-4 focus:ring-blue-600/5 focus:border-blue-600 outline-none transition-all duration-300 text-gray-800 text-sm font-medium placeholder:text-gray-400"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="relative group">
+                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 material-icons text-xl group-focus-within:text-blue-600 transition-colors duration-300">lock</span>
+                <input
+                  type={isPasswordVisible ? 'text' : 'password'}
+                  placeholder="Password"
+                  className="w-full pl-14 pr-14 py-5 bg-gray-50/50 border border-gray-200 rounded-[22px] focus:bg-white focus:ring-4 focus:ring-blue-600/5 focus:border-blue-600 outline-none transition-all duration-300 text-gray-800 text-sm font-medium placeholder:text-gray-400"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsPasswordVisible(!isPasswordVisible)}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-blue-600 transition-colors p-1"
+                >
+                  <span className="material-icons text-xl">{isPasswordVisible ? 'visibility_off' : 'visibility'}</span>
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-16 bg-[#0f213a] hover:bg-blue-700 text-white rounded-[22px] font-black text-xs tracking-[0.25em] transition-all duration-300 shadow-lg shadow-blue-900/10 active:scale-[0.98] disabled:opacity-70 flex items-center justify-center gap-3 mt-4"
+              >
+                {isLoading ? (
+                  <span className="w-6 h-6 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>SIGN IN</span>
+                    <span className="material-icons text-lg">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <footer className="mt-10 text-center">
+              <p className="text-[10px] font-black text-black-300 tracking-[0.3em] uppercase hover:text-gray-400 transition-colors cursor-default">
+                © 2026 MANDAUE CITY
+              </p>
             </footer>
           </form>
         </div>
       </div>
-
-      {isLoading && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
-          <div className="bg-white p-8 rounded-2xl flex flex-col items-center w-[220px]">
-            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm font-semibold text-gray-800">Verifying...</p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
