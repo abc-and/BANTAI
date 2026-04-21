@@ -1,16 +1,16 @@
 "use client";
- 
+
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
- 
+
 const LOAD_MESSAGES = [
   "Loading platform...",
   "Fetching route data...",
   "Syncing vehicle registry...",
   "Almost there...",
 ];
- 
+
 const SEGS = 20;
 
 
@@ -64,7 +64,7 @@ function JeepneySVG() {
 function LoadingScreen({ progress }: { progress: number }) {
   const sceneRef = useRef<HTMLDivElement>(null);
   const [sceneWidth, setSceneWidth] = useState(440);
- 
+
   useEffect(() => {
     const measure = () => {
       if (sceneRef.current) setSceneWidth(sceneRef.current.offsetWidth);
@@ -73,15 +73,15 @@ function LoadingScreen({ progress }: { progress: number }) {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
- 
+
   const jeepW = 88;
   const leftPx = Math.round((progress / 100) * (sceneWidth - jeepW - 8));
   const msgIdx = Math.min(Math.floor(progress / 25), LOAD_MESSAGES.length - 1);
   const segsCount = Math.round((progress / 100) * SEGS);
- 
+
   return (
     <div className="fixed inset-0 bg-[#F8FAFC] z-50 flex flex-col items-center justify-center p-6 gap-5">
- 
+
       {/* Road scene */}
       <div className="w-full max-w-md">
         <div
@@ -112,7 +112,7 @@ function LoadingScreen({ progress }: { progress: number }) {
               ))}
             </div>
           </div>
- 
+
           {/* Silhouette buildings */}
           <div
             className="absolute top-0 left-0 right-0 h-7 flex items-end overflow-hidden"
@@ -137,7 +137,7 @@ function LoadingScreen({ progress }: { progress: number }) {
               )}
             </div>
           </div>
- 
+
           {/* Road */}
           <div className="absolute bottom-0 left-0 right-0 h-13" style={{ height: 52, background: "#334155" }} />
           {/* Yellow edge line */}
@@ -149,16 +149,16 @@ function LoadingScreen({ progress }: { progress: number }) {
               style={{ animation: "bantai-road 0.35s linear infinite", width: "200%" }}
             >
               {Array.from({ length: 28 }).map((_, i) => (
-                <>
-                  <div key={`d${i}`} style={{ width: 28, height: 4, background: "#fff", borderRadius: 2, flexShrink: 0 }} />
-                  <div key={`g${i}`} style={{ width: 18, flexShrink: 0 }} />
-                </>
+                <div key={`dash-group-${i}`} className="flex flex-shrink-0">
+                  <div style={{ width: 28, height: 4, background: "#fff", borderRadius: 2, flexShrink: 0 }} />
+                  <div style={{ width: 18, flexShrink: 0 }} />
+                </div>
               ))}
             </div>
           </div>
           {/* Shoulder */}
           <div className="absolute bottom-0 left-0 right-0" style={{ height: 6, background: "#475569" }} />
- 
+
           {/* Exhaust puffs */}
           <div
             className="absolute flex flex-row-reverse gap-1"
@@ -178,7 +178,7 @@ function LoadingScreen({ progress }: { progress: number }) {
               />
             ))}
           </div>
- 
+
           {/* Jeepney */}
           <div
             className="absolute"
@@ -188,7 +188,7 @@ function LoadingScreen({ progress }: { progress: number }) {
           </div>
         </div>
       </div>
- 
+
       {/* Segment bar */}
       <div className="w-full max-w-md flex gap-1">
         {Array.from({ length: SEGS }).map((_, i) => (
@@ -199,7 +199,7 @@ function LoadingScreen({ progress }: { progress: number }) {
           />
         ))}
       </div>
- 
+
       {/* Smooth progress bar */}
       <div className="w-full max-w-md h-[5px] bg-slate-200 rounded-full overflow-hidden">
         <div
@@ -207,7 +207,7 @@ function LoadingScreen({ progress }: { progress: number }) {
           style={{ width: `${progress}%` }}
         />
       </div>
- 
+
       {/* Logo + percentage */}
       <div className="w-full max-w-md flex justify-between items-center">
         <div className="flex flex-col gap-1">
@@ -226,7 +226,7 @@ function LoadingScreen({ progress }: { progress: number }) {
           {progress}%
         </span>
       </div>
- 
+
       {/* Keyframes injected once */}
       <style>{`
         @keyframes bantai-road {
@@ -290,7 +290,7 @@ export default function LandingPage() {
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-4">
 
         {/* Real logo */}
-        <div className="mb-6">
+        <div className="mb-0">
           <Image
             src="/bantai_logo.png"
             alt="Bantai AI"
@@ -302,29 +302,23 @@ export default function LandingPage() {
         </div>
 
         {/* Headline */}
-        <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-[1.1] text-center mb-6">
+        <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-[1.1] text-center mb-4">
           Smart Management for <br />
           <span className="text-blue-600">Modern Transit.</span>
         </h1>
 
         <p className="text-slate-500 text-base md:text-lg max-w-xl text-center leading-relaxed mb-8">
-          Real-time monitoring for jeepney operators — track your units, 
+          Real-time monitoring for jeepney operators — track your units,
           get instant alerts on overspeeding and overcrowding, and keep your fleet compliant.
         </p>
 
-        {/* Buttons — both trigger jeepney loader */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        {/* Centered Get Started Button */}
+        <div className="flex justify-center w-full">
           <button
             onClick={() => handleNavigate("/login")}
-            className="px-10 py-3.5 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95"
+            className="px-12 py-4 rounded-xl bg-blue-600 text-white font-bold text-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95"
           >
             Get Started
-          </button>
-          <button
-            onClick={() => handleNavigate("/about")}
-            className="px-10 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-lg hover:border-blue-500 transition-all active:scale-95"
-          >
-            Learn More
           </button>
         </div>
       </div>
