@@ -1,14 +1,14 @@
-import { config } from "dotenv";
+import { defineConfig, env } from "@prisma/config";
 
-config({ path: ".env.local" });
-config({ path: ".env", override: false });
+export default defineConfig({
+  // Point to your local schema file
+  schema: "prisma/schema.prisma",
 
-export default {
-  datasources: {
-    db: {
-      provider: "postgresql",
-      url: process.env.DATABASE_URL,
-      directUrl: process.env.DIRECT_URL,
-    },
+  datasource: {
+    // Use the Prisma env() helper instead of process.env
+    url: env("DATABASE_URL"),
   },
-};
+
+  // This is used for CLI tasks like 'db push'
+  managementUrl: env("DIRECT_URL"),
+});
