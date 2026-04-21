@@ -43,16 +43,28 @@ export default function AdminLoginPage() {
     <div className="h-screen w-full flex bg-[#FDFDFD] overflow-hidden font-sans">
 
       {/* ================= LEFT SIDE: STABLE BG + ICON ONLY BACK ================= */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-16">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col p-8">
 
-        {/* MINIMALIST ICON BACK BUTTON */}
-        <button
-          onClick={() => router.push('/')}
-          className="absolute top-10 left-10 z-20 flex items-center justify-center w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white hover:bg-white/30 transition-all group shadow-2xl"
-        >
-          <span className="material-icons text-2xl group-hover:-translate-x-1 transition-transform">arrow_back</span>
-        </button>
+        {/* ALIGNED BACK BUTTON AND TITLE */}
+        <div className="relative z-20 flex items-center gap-5 mt-4">
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center justify-center w-12 h-12 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-white hover:bg-white/30 transition-all group shadow-2xl"
+          >
+            <span className="material-icons text-2xl group-hover:-translate-x-1 transition-transform">arrow_back</span>
+          </button>
 
+          <div>
+            <h2 className="text-xl font-black tracking-[0.25em] text-white uppercase leading-none">
+              MPUJ MONITORING SYSTEM
+            </h2>
+            <p className="text-blue-400/80 text-[10px] font-bold tracking-widest mt-1 uppercase">
+              Public Transport Office
+            </p>
+          </div>
+        </div>
+
+        {/* BACKGROUND IMAGE */}
         <div className="absolute inset-0 z-0">
           <Image
             src="/modjep.jpg"
@@ -65,19 +77,10 @@ export default function AdminLoginPage() {
           <div className="absolute inset-0 bg-[#0f213a]/55" />
         </div>
 
-        {/* Content pushed down slightly to avoid overlap with the back button */}
-        <div className="relative z-10 mt-16">
-          <div className="flex items-center gap-4 mb-12">
-            <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20 shadow-xl">
-              <span className="material-icons text-blue-400 text-2xl">directions_bus</span>
-            </div>
-            <div>
-              <h2 className="text-xl font-black tracking-[0.25em] text-white uppercase leading-none">MPUJ MONITORING SYSTEM</h2>
-              <p className="text-blue-400/80 text-[10px] font-bold tracking-widest mt-1 uppercase">Public Transport Office</p>
-            </div>
-          </div>
-        </div>
+        {/* SPACER TO PUSH THE BOTTOM TAG DOWN */}
+        <div className="flex-1" />
 
+        {/* AUTHORIZED TAG AT THE BOTTOM */}
         <div className="relative z-10 flex items-center gap-4 text-white/70 text-sm py-4 px-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 w-fit">
           <span className="material-icons text-blue-400">verified_user</span>
           <p className="font-medium tracking-tight">Authorized Personnel Only. Access is securely monitored.</p>
