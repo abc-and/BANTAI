@@ -32,25 +32,116 @@ enum JeepneyStatus {
   INACTIVE
 }
 
+enum ViolationStatus {
+  PENDING
+  CONFIRMED
+  DISMISSED
+}
+
+enum StorageType {
+  IMG_PROOF
+  DOCUMENT
+  OTHER
+}
+
 model MPUJMetadata {
-  id               String         @id @default(uuid())
-  vehicleId        String         @unique @map("vehicle_id")
-  driverName       String         @map("driver_name")
-  plateNumber      String         @map("plate_number")
-  vehicleType      String         @map("vehicle_type")
-  vehicleModel     String         @map("vehicle_model")
-  operator         String
-  routeName        String         @map("route_name")
-  routeCode        String?        @map("route_code")
-  description      String?        @map("description")
-  sittingCapacity  Int            @map("sitting_capacity")
-  standingCapacity Int            @map("standing_capacity")
-  speedLimit       Int            @map("speed_limit")
-  status           JeepneyStatus  @default(ACTIVE)
-  registrationDate DateTime       @default(now()) @map("registration_date")
-  violationCount   Int            @default(0) @map("violation_count")
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
+  id                     String                  @id @default(uuid())
+  vehicleId              String                  @unique @map("vehicle_id")
+  driverName             String                  @map("driver_name")
+  plateNumber            String                  @map("plate_number")
+  vehicleType            String                  @map("vehicle_type")
+  vehicleModel           String                  @map("vehicle_model")
+  operator               String
+  routeName              String                  @map("route_name")
+  routeCode              String?                 @map("route_code")
+  description            String?
+  sittingCapacity        Int                     @map("sitting_capacity")
+  standingCapacity       Int                     @map("standing_capacity")
+  speedLimit             Int                     @map("speed_limit")
+  status                 JeepneyStatus           @default(ACTIVE)
+  registrationDate       DateTime                @default(now()) @map("registration_date")
+  overspeedingCount      Int                     @default(0) @map("overspeeding_count")
+  overcapacityCount      Int                     @default(0) @map("overcapacity_count")
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
+
+  overspeedingViolations OverspeedingViolation[]
+  overcapacityViolations OvercapacityViolation[]
 
   @@map("mpuj_metadata")
+}
+
+// ------------------------------------------------------------------
+// Stores any file asset — img proofs, docs, etc.
+// Referenced by violation tables via violationId + violationType
+// ------------------------------------------------------------------
+model ViolationStorage {
+  id            String      @id @default(uuid())
+  violationId   String      @map("violation_id")   // FK to either violation table
+  violationType String      @map("violation_type")  // "OVERSPEEDING" | "OVERCAPACITY"
+  storageType   StorageType @default(IMG_PROOF) @map("storage_type")
+  fileName      String      @map("file_name")
+  filePath      String      @map("file_path")       // relative storage path
+  fileUrl       String?     @map("file_url")        // public/signed URL if applicable
+  mimeType      String?     @map("mime_type")       // e.g. "image/jpeg"
+  fileSizeBytes Int?        @map("file_size_bytes")
+  uploadedAt    DateTime    @default(now()) @map("uploaded_at")
+
+  @@index([violationId, violationType])
+  @@map("violation_storage")
+}
+
+// ------------------------------------------------------------------
+// metadata JSON shape (for reference — not enforced by Prisma):
+// {
+//   "location": {
+//     "latitude": 10.3157,
+//     "longitude": 123.8854,
+//     "locationName": "Colon St, Cebu City"
+//   },
+//   "speed": {
+//     "recordedSpeed": 85,
+//     "speedLimit": 60,
+//     "speedExcess": 25
+//   }
+// }
+// ------------------------------------------------------------------
+model OverspeedingViolation {
+  id          String          @id @default(uuid())
+  vehicleId   String          @map("vehicle_id")
+  vehicle     MPUJMetadata    @relation(fields: [vehicleId], references: [vehicleId])
+  metadata    Json            // location + speed snapshot (see shape above)
+  status      ViolationStatus @default(PENDING)
+  remarks     String?
+  detectedAt  DateTime        @default(now()) @map("detected_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@map("overspeeding_violations")
+}
+
+// ------------------------------------------------------------------
+// metadata JSON shape (for reference — not enforced by Prisma):
+// {
+//   "capacity": {
+//     "sittingCapacity": 16,
+//     "standingCapacity": 4,
+//     "totalCapacity": 20,
+//     "passengerCount": 27,
+//     "excessCount": 7
+//   }
+// }
+// ------------------------------------------------------------------
+model OvercapacityViolation {
+  id          String          @id @default(uuid())
+  vehicleId   String          @map("vehicle_id")
+  vehicle     MPUJMetadata    @relation(fields: [vehicleId], references: [vehicleId])
+  metadata    Json            // capacity snapshot (see shape above)
+  status      ViolationStatus @default(PENDING)
+  remarks     String?
+  detectedAt  DateTime        @default(now()) @map("detected_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  @@map("overcapacity_violations")
 }
