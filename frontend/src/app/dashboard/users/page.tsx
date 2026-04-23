@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Users, Plus, User as UserIcon,
-  Edit, Trash2, Shield, CheckCircle2, AlertTriangle, X, Loader2
+  Edit, Trash2, Shield, CheckCircle2, AlertTriangle, X, Loader2, ChevronDown
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -88,6 +88,73 @@ export default function UserManagement() {
     }
   };
 
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/${editingUser.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: formData.name.split(' ')[0] || '',
+          lastName: formData.name.split(' ').slice(1).join(' ') || '',
+          email: formData.email,
+          username: formData.username,
+          role: formData.role.toUpperCase(),
+          ...(formData.password && { password: formData.password })
+        }),
+      });
+
+      if (res.ok) {
+        setEditingUser(null);
+        setFormData({ name: '', email: '', username: '', password: '', role: 'Viewer' });
+        fetchUsers();
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || "Failed to update user");
+      }
+    } catch (err) {
+      alert("Error: Backend server is not running");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/${deletingUser.id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setDeletingUser(null);
+        fetchUsers();
+      } else {
+        alert("Failed to delete user");
+      }
+    } catch (err) {
+      alert("Error: Backend server is not running");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startEdit = (user: User) => {
+    setEditingUser(user);
+    setFormData({
+      name: `${user.firstName} ${user.lastName}`.trim(),
+      email: user.email || '',
+      username: user.username,
+      password: '',
+      role: getUIRole(user.role) as Role
+    });
+  };
+
   // --- UI HELPERS ---
 
   const roleStyles: any = {
@@ -97,7 +164,7 @@ export default function UserManagement() {
       border: t('border-rose-900/30', 'border-rose-200/50'),
       icon: t('text-rose-400', 'text-rose-500')
     },
-    ADMIN: { // Map database enum to style
+    ADMIN: {
       text: t('text-rose-400', 'text-rose-600'),
       bg: t('bg-rose-900/20', 'bg-rose-50'),
       border: t('border-rose-900/30', 'border-rose-200/50'),
@@ -210,7 +277,7 @@ export default function UserManagement() {
                     </div>
 
                     <div className={`w-full md:w-24 flex md:justify-end gap-2 border-t pt-3 md:border-t-0 md:pt-0 transition-colors ${t("border-slate-800", "border-slate-100")}`}>
-                      <button className={`p-2 rounded-lg transition-colors ${t("text-slate-500 hover:text-blue-400 hover:bg-blue-900/40", "text-slate-400 hover:text-blue-600 hover:bg-blue-50")}`} title="Edit User">
+                      <button onClick={() => startEdit(user)} className={`p-2 rounded-lg transition-colors ${t("text-slate-500 hover:text-blue-400 hover:bg-blue-900/40", "text-slate-400 hover:text-blue-600 hover:bg-blue-50")}`} title="Edit User">
                         <Edit className="w-4 h-4" />
                       </button>
                       <button onClick={() => setDeletingUser(user)} className={`p-2 rounded-lg transition-colors ${t("text-slate-500 hover:text-rose-400 hover:bg-rose-900/40", "text-slate-400 hover:text-rose-600 hover:bg-rose-50")}`} title="Delete User">
@@ -225,6 +292,7 @@ export default function UserManagement() {
         </div>
       </div>
 
+      {/* Add User Modal */}
       {isAddOpen && (
         <UserModal
           isDark={isDark}
@@ -237,78 +305,167 @@ export default function UserManagement() {
         />
       )}
 
-      {/* ... keeping your existing Delete Modal ... */}
+      {/* Edit User Modal */}
+      {editingUser && (
+        <UserModal
+          isDark={isDark}
+          title="Edit User"
+          onClose={() => {
+            setEditingUser(null);
+            setFormData({ name: '', email: '', username: '', password: '', role: 'Viewer' });
+          }}
+          onSubmit={handleEditSubmit}
+          formData={formData}
+          setFormData={setFormData}
+          isLoading={loading}
+          isEdit={true}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className={`rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
+            <div className={`p-6 border-b flex justify-between items-center transition-colors ${t("bg-slate-800/50 border-slate-700", "bg-slate-50 border-slate-100")}`}>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-rose-500/20">
+                  <AlertTriangle className="w-5 h-5 text-rose-500" />
+                </div>
+                <h2 className="text-lg font-black uppercase tracking-tight">Delete User</h2>
+              </div>
+              <button onClick={() => setDeletingUser(null)} className={`p-2 rounded-xl transition-colors ${t("text-slate-400 hover:bg-slate-800 hover:text-white", "text-slate-400 hover:bg-slate-100 hover:text-slate-800")}`}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className={`text-sm mb-6 ${t("text-slate-300", "text-slate-600")}`}>
+                Are you sure you want to delete user <span className="font-bold">{deletingUser.firstName} {deletingUser.lastName}</span>? This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setDeletingUser(null)} className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${t("text-slate-400 hover:bg-slate-800", "text-slate-500 hover:bg-slate-100")}`}>
+                  Cancel
+                </button>
+                <button onClick={handleDeleteUser} disabled={loading} className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm flex items-center gap-2 transition-all">
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Delete User
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// Updated UserModal to include Username/Password
-function UserModal({ isDark, title, onClose, onSubmit, formData, setFormData, isLoading }: any) {
+// Updated UserModal with ChevronDown icon for Role Allocation
+function UserModal({ isDark, title, onClose, onSubmit, formData, setFormData, isLoading, isEdit }: any) {
   const t = (dark: string, light: string) => (isDark ? dark : light);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className={`rounded-4xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
-        <div className={`p-8 border-b flex justify-between items-center transition-colors ${t("bg-slate-800/50 border-slate-700", "bg-slate-50 border-slate-100")}`}>
-          <h2 className="text-xl font-black uppercase tracking-tight">{title}</h2>
+      <div className={`rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
+        <div className={`p-6 border-b flex justify-between items-center transition-colors ${t("bg-slate-800/50 border-slate-700", "bg-slate-50 border-slate-100")}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${t("bg-blue-900/20", "bg-blue-50")}`}>
+              <Shield className={`w-5 h-5 ${t("text-blue-400", "text-blue-600")}`} />
+            </div>
+            <h2 className="text-lg font-black uppercase tracking-tight">{title}</h2>
+          </div>
           <button onClick={onClose} className={`p-2 rounded-xl transition-colors ${t("text-slate-400 hover:bg-slate-800 hover:text-white", "text-slate-400 hover:bg-slate-100 hover:text-slate-800")}`}>
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={onSubmit} className="p-8 space-y-5 overflow-y-auto max-h-[75vh]">
+
+        <form onSubmit={onSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
           <div>
-            <label className={`block text-xs font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-700")}`}>Full Name</label>
+            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
+              Full Name
+            </label>
             <input
-              type="text" required
+              type="text"
+              required
               value={formData.name}
               onChange={e => setFormData({ ...formData, name: e.target.value })}
-              className={`w-full rounded-xl px-5 py-3 text-sm font-semibold focus:outline-none border transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-white border-slate-200 text-slate-800")}`}
+              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
+              placeholder="Juan Dela Cruz"
             />
           </div>
+
           <div>
-            <label className={`block text-xs font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-700")}`}>Username</label>
+            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
+              Username
+            </label>
             <input
-              type="text" required
+              type="text"
+              required
               value={formData.username}
               onChange={e => setFormData({ ...formData, username: e.target.value })}
-              className={`w-full rounded-xl px-5 py-3 text-sm font-semibold focus:outline-none border transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-white border-slate-200 text-slate-800")}`}
+              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
+              placeholder="@username"
             />
           </div>
+
           <div>
-            <label className={`block text-xs font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-700")}`}>Email Address</label>
+            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
+              Email Address
+            </label>
             <input
               type="email"
               value={formData.email}
               onChange={e => setFormData({ ...formData, email: e.target.value })}
-              className={`w-full rounded-xl px-5 py-3 text-sm font-semibold focus:outline-none border transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-white border-slate-200 text-slate-800")}`}
+              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
+              placeholder="user@example.com"
             />
           </div>
+
           <div>
-            <label className={`block text-xs font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-700")}`}>Password</label>
+            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
+              {isEdit ? "New Password (optional)" : "Password"}
+            </label>
             <input
-              type="password" required
+              type="password"
+              required={!isEdit}
               value={formData.password}
               onChange={e => setFormData({ ...formData, password: e.target.value })}
-              className={`w-full rounded-xl px-5 py-3 text-sm font-semibold focus:outline-none border transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-white border-slate-200 text-slate-800")}`}
+              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
+              placeholder={isEdit ? "Leave blank to keep current" : "Enter password"}
             />
           </div>
+
           <div>
-            <label className={`block text-xs font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-700")}`}>Role Allocation</label>
-            <select
-              className={`w-full rounded-xl px-5 py-3 text-sm font-black focus:outline-none border appearance-none cursor-pointer ${t("bg-slate-800 border-slate-700 text-white", "bg-white border-slate-200 text-slate-800")}`}
-              value={formData.role}
-              onChange={e => setFormData({ ...formData, role: e.target.value as Role })}
-            >
-              <option value="Administrator">Administrator</option>
-              <option value="Manager">Manager</option>
-              <option value="Viewer">Viewer</option>
-            </select>
+            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
+              Role Allocation
+            </label>
+            <div className="relative">
+              <select
+                className={`w-full rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-2 appearance-none cursor-pointer transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
+                value={formData.role}
+                onChange={e => setFormData({ ...formData, role: e.target.value as Role })}
+              >
+                <option value="Administrator" className={t("bg-slate-800", "bg-white")}>Administrator</option>
+                <option value="Manager" className={t("bg-slate-800", "bg-white")}>Manager</option>
+                <option value="Viewer" className={t("bg-slate-800", "bg-white")}>Viewer</option>
+              </select>
+              <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${t("text-slate-400", "text-slate-500")}`} />
+            </div>
           </div>
-          <div className="pt-6 flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-6 py-3 font-bold text-sm text-slate-500">Cancel</button>
-            <button type="submit" disabled={isLoading} className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm flex items-center gap-2">
+
+          <div className="pt-4 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${t("text-slate-400 hover:bg-slate-800", "text-slate-500 hover:bg-slate-100")}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm flex items-center gap-2 transition-all active:scale-95"
+            >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create User
+              {isEdit ? "Update User" : "Create User"}
             </button>
           </div>
         </form>
