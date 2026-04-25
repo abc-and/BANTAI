@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { format } from "date-fns";
+import { format, startOfDay, startOfWeek, startOfMonth, isWithinInterval } from "date-fns";
 import { useTheme } from "@/context/ThemeContext";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 
@@ -91,6 +91,10 @@ const SAMPLE_VIOLATIONS: Violation[] = [
     },
 ];
 
+// ─── Time Filter Type ────────────────────────────────────────────────────────
+
+type TimeFilter = "All" | "Today" | "This Week" | "This Month";
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ViolationsManagement({
@@ -106,10 +110,26 @@ export default function ViolationsManagement({
     );
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState<ViolationType | "All">("All");
+    const [timeFilter, setTimeFilter] = useState<TimeFilter>("All");
     const [selectedViolation, setSelectedViolation] = useState<Violation | null>(null);
     const [snapshotViolation, setSnapshotViolation] = useState<Violation | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [resolveConfirm, setResolveConfirm] = useState<Violation | null>(null);
+
+    // Helper to filter by time range
+    const isWithinTimeRange = (timestamp: Date, filter: TimeFilter): boolean => {
+        const now = new Date();
+        switch (filter) {
+            case "Today":
+                return isWithinInterval(timestamp, { start: startOfDay(now), end: now });
+            case "This Week":
+                return isWithinInterval(timestamp, { start: startOfWeek(now), end: now });
+            case "This Month":
+                return isWithinInterval(timestamp, { start: startOfMonth(now), end: now });
+            default:
+                return true;
+        }
+    };
 
     // Only show verified violations (not detected/resolved/dismissed)
     const filteredViolations = violations.filter((v) => {
@@ -130,6 +150,7 @@ export default function ViolationsManagement({
                 return false;
         }
         if (typeFilter !== "All" && v.type !== typeFilter) return false;
+        if (!isWithinTimeRange(v.timestamp, timeFilter)) return false;
         return true;
     });
 
@@ -294,7 +315,7 @@ export default function ViolationsManagement({
                     <StatChip isDark={isDark} label="Overspeeding" count={totalOverspeed} color="orange" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />} />
                 </div>
 
-                {/* ✅ UPDATED CONTROL BAR */}
+                {/* ✅ UPDATED CONTROL BAR with Time Filter */}
                 <div className={`border-b px-4 py-3 flex items-center gap-3 transition-colors duration-300 ${t("bg-[#1e293b]/50 border-slate-700", "bg-white border-slate-200")}`}>
 
                     {/* LEFT */}
@@ -320,6 +341,18 @@ export default function ViolationsManagement({
                             <option value="All">All Violation Types</option>
                             <option value={ViolationType.overload}>Overcapacity Only</option>
                             <option value={ViolationType.overspeed}>Overspeeding Only</option>
+                        </select>
+
+                        {/* NEW TIME FILTER DROPDOWN */}
+                        <select
+                            value={timeFilter}
+                            onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
+                            className={`border rounded-xl px-4 py-2.5 text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${t("bg-slate-800 border-slate-700 text-white", "bg-slate-50 border-slate-300 text-slate-800")}`}
+                        >
+                            <option value="All">All Time</option>
+                            <option value="Today">Today</option>
+                            <option value="This Week">This Week</option>
+                            <option value="This Month">This Month</option>
                         </select>
                     </div>
 
@@ -417,7 +450,7 @@ export default function ViolationsManagement({
                                                     className={`hover:scale-105 active:scale-95 transition-all flex items-center gap-1 px-2 py-1 text-[9px] font-black rounded border uppercase ${isOverload ? t("bg-rose-900/30 text-rose-400 border-rose-800/50 hover:bg-rose-900/50", "bg-red-50 text-red-600 border-red-200 hover:bg-red-100") : t("bg-amber-900/30 text-amber-500 border-amber-800/50 hover:bg-amber-900/50", "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100")}`}
                                                     title="Open Ticket"
                                                 >
-                                                    {isOverload ? "Overload" : "Overspeed"}
+                                                    {isOverload ? "Overcapacity" : "Overspeed"}
                                                 </button>
                                             </div>
                                             <div className={`flex items-center gap-1 text-[10px] font-medium truncate pr-2 ${t("text-slate-400", "text-slate-600")}`}>
@@ -610,7 +643,7 @@ function DetailsPanel({
                             </svg>
                         </div>
                         <div>
-                            <h2 className={`text-2xl font-black tracking-tight leading-none ${t("text-white", "text-slate-800 uppercase")}`}>{isOverload ? "Overload" : "Overspeeding"}</h2>
+                            <h2 className={`text-2xl font-black tracking-tight leading-none ${t("text-white", "text-slate-800 uppercase")}`}>{isOverload ? "Overcapacity" : "Overspeeding"}</h2>
                             <p className="text-slate-400 text-sm font-medium mt-2">{format(v.timestamp, "MMMM dd, yyyy 'at' hh:mm a")}</p>
                         </div>
                     </div>

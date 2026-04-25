@@ -420,7 +420,7 @@ export default function HistoryCompliancePage() {
                                                     className={`hover:scale-105 active:scale-95 transition-all flex items-center gap-1 px-2 py-1 text-[9px] font-black rounded border uppercase ${isOverload ? t("bg-rose-900/30 text-rose-400 border-rose-800/50 hover:bg-rose-900/50", "bg-red-50 text-red-600 border-red-200 hover:bg-red-100") : t("bg-amber-900/30 text-amber-500 border-amber-800/50 hover:bg-amber-900/50", "bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100")}`}
                                                     title="Open Ticket"
                                                 >
-                                                    {isOverload ? "Overload" : "Overspeed"}
+                                                    {isOverload ? "Overcapacity" : "Overspeed"}
                                                 </button>
                                             </div>
                                             <div className={`flex items-center gap-1 text-[10px] font-medium truncate pr-2 ${t("text-slate-400", "text-slate-600")}`}>
@@ -608,7 +608,7 @@ function DetailsPanel({
                             </svg>
                         </div>
                         <div>
-                            <h2 className={`text-2xl font-black tracking-tight leading-none ${t("text-white", "text-slate-800 uppercase")}`}>{isOverload ? "Overload" : "Overspeeding"}</h2>
+                            <h2 className={`text-2xl font-black tracking-tight leading-none ${t("text-white", "text-slate-800 uppercase")}`}>{isOverload ? "Overcapacity" : "Overspeeding"}</h2>
                             <p className="text-slate-400 text-sm font-medium mt-2">{format(v.timestamp, "MMMM dd, yyyy 'at' hh:mm a")}</p>
                         </div>
                     </div>
