@@ -287,6 +287,11 @@ function QuickViewModal({ violation, isDark, onClose, onVerify, onDismiss }: {
   onDismiss: (id: string, type: ViolationType) => void;
 }) {
   const isOverload = violation.type === "overloading";
+
+  // Format coordinates to 5 decimal places
+  const lat = violation.coordinates[0].toFixed(5);
+  const lng = violation.coordinates[1].toFixed(5);
+
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
       <div className={`w-full max-w-[480px] rounded-[32px] overflow-hidden shadow-2xl ${t(isDark, "bg-slate-900", "bg-white")}`}>
@@ -312,7 +317,7 @@ function QuickViewModal({ violation, isDark, onClose, onVerify, onDismiss }: {
         </div>
 
         {/* Body */}
-        <div className="p-8 space-y-6">
+        <div className="p-8 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className={`p-5 rounded-2xl border ${t(isDark, "bg-slate-800/40 border-slate-700/50", "bg-slate-50 border-slate-100")}`}>
               <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-2">Plate Number</p>
@@ -330,17 +335,30 @@ function QuickViewModal({ violation, isDark, onClose, onVerify, onDismiss }: {
             </div>
           </div>
 
+          {/* ── Location block — shows street name + coordinates ── */}
           <div className={`p-5 rounded-2xl border ${t(isDark, "bg-slate-800/40 border-slate-700/50", "bg-slate-50 border-slate-100")}`}>
-            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-2">Location</p>
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-3">Location</p>
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 mt-0.5 flex-shrink-0">
                 <MapPin size={14} strokeWidth={2.5} />
               </div>
-              <p className={`text-base font-bold ${t(isDark, "text-slate-200", "text-slate-700")}`}>{violation.location}</p>
+              <div className="min-w-0">
+                {/* Street name */}
+                <p className={`text-base font-bold leading-snug ${t(isDark, "text-slate-200", "text-slate-700")}`}>
+                  {violation.location}
+                </p>
+                {/* Coordinates row */}
+                <div className={`flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-lg w-fit ${t(isDark, "bg-slate-700/60", "bg-slate-200/70")}`}>
+                  <Navigation size={10} className="text-slate-400 flex-shrink-0" />
+                  <span className={`text-[11px] font-mono font-semibold tracking-wide ${t(isDark, "text-slate-300", "text-slate-600")}`}>
+                    {lat}, {lng}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-2 pt-2">
+          <div className="flex items-center justify-between px-2 pt-1">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse" />
               <span className="text-xs font-black text-amber-600 uppercase tracking-widest italic">{violation.status}</span>
@@ -349,7 +367,7 @@ function QuickViewModal({ violation, isDark, onClose, onVerify, onDismiss }: {
           </div>
 
           {violation.status === "unverified" && (
-            <div className="flex gap-4 pt-4">
+            <div className="flex gap-4 pt-2">
               <button
                 onClick={() => { onVerify(violation.id, violation.type); onClose(); }}
                 className="flex-1 h-14 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl transition-all active:scale-95 text-sm"
