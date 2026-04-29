@@ -1,33 +1,23 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaClient, UserRole } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import { createClient } from "@supabase/supabase-js";
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
-
-const ADMIN_CREDENTIALS = {
-  username: "admin",
-  email: "admin@bantai.ai",
-  firstName: "Admin",
-  lastName: "User",
-  role: UserRole.ADMIN,
-};
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 if (!ADMIN_PASSWORD) {
-  throw new Error("ADMIN_PASSWORD is required in the environment to seed the admin user.");
+  throw new Error("ADMIN_PASSWORD is required");
 }
 
 async function main() {
-  const existing = await prisma.bantaiUser.findUnique({
-    where: { username: ADMIN_CREDENTIALS.username },
-  });
+  const { data: existing } = await supabase
+    .from("bantai_users")
+    .select("username")
+    .eq("username", "admin")
+    .single();
 
   if (existing) {
     console.log(`Admin user already exists: ${existing.username}`);
@@ -36,29 +26,28 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD!, 10);
 
-  const user = await prisma.bantaiUser.create({
-    data: {
-      username: ADMIN_CREDENTIALS.username,
-      email: ADMIN_CREDENTIALS.email,
-      firstName: ADMIN_CREDENTIALS.firstName,
-      lastName: ADMIN_CREDENTIALS.lastName,
-      passwordHash,
-      role: ADMIN_CREDENTIALS.role,
-      isActive: true,
-    },
-  });
+  const { data, error } = await supabase
+    .from("bantai_users")
+    .insert({
+      username: "admin",
+      email: "admin@bantai.ai",
+      first_name: "Admin",
+      last_name: "User",
+      password: passwordHash,
+      role: "ADMIN",
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
 
   console.log("Created admin user:");
-  console.log(`  username: ${user.username}`);
-  console.log(`  email: ${user.email}`);
-  console.log("  password: loaded from ADMIN_PASSWORD env variable");
+  console.log(`  username: ${data.username}`);
+  console.log(`  email: ${data.email}`);
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

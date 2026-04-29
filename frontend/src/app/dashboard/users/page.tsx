@@ -1,475 +1,1212 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  Users, Plus, User as UserIcon,
-  Edit, Trash2, Shield, CheckCircle2, AlertTriangle, X, Loader2, ChevronDown
+  Shield, Users, UserPlus, Trash2, X, ChevronDown,
+  ChevronRight, Search, Building2, User, AlertCircle,
+  Eye, EyeOff, RefreshCw, Plus, Mail, Phone
 } from "lucide-react";
-import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
 
-// Matches your UI logic
-type Role = 'Administrator' | 'Manager' | 'Viewer';
+const API = "http://localhost:4000";
 
-interface User {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Role = "SUPERADMIN" | "ADMIN" | "MANAGER";
+
+/**
+ * Shape returned by your /api/auth/login route:
+ *   { id, email, firstName, lastName, role, isActive, createdAt }
+ *
+ * NOTE: there is no `username` or `operator_id` in this response.
+ * - role === "ADMIN" with no operator_id  → treated as SUPERADMIN
+ * - role === "ADMIN" with an operator_id  → operator-level admin
+ * - role === "MANAGER"                    → read-only manager view
+ */
+interface AuthUser {
   id: string;
+  email: string;
   firstName: string;
   lastName: string;
-  name?: string; // We'll compute this for the UI
-  email: string | null;
-  username: string;
-  role: string; // From DB
+  role: Role;
+  operator_id?: string;   // only present for operator-scoped admins/managers
+  operator_name?: string;
   isActive: boolean;
   createdAt: string;
 }
 
-export default function UserManagement() {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-  const t = (dark: string, light: string) => (isDark ? dark : light);
+interface Operator {
+  operator_id: string;
+  operator_name: string;
+  email?: string;
+  contact_number?: string;
+}
 
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+interface OperatorUser {
+  user_id: string;
+  username: string;
+  employee_name: string;
+  email: string;
+  contact_number: string;
+  role: "ADMIN" | "MANAGER";
+  operator_id: string;
+  operator_name: string;
+}
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    username: '',
-    password: '',
-    role: 'Viewer' as Role
-  });
+interface OperatorGroup {
+  operator: Operator;
+  admin: OperatorUser | null;
+  managers: OperatorUser[];
+}
 
-  const API_URL = "http://localhost:4000/api/users";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  // --- DATABASE ACTIONS ---
+const getToken = () =>
+  typeof window !== "undefined"
+    ? localStorage.getItem("bantai_token") ?? ""
+    : "";
 
-  const fetchUsers = async () => {
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${getToken()}`,
+});
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function UsersPage() {
+  const { user: rawAuthUser, loading } = useAuth();
+
+  /**
+   * Normalize the raw auth context user into our local AuthUser shape.
+   *
+   * Your login API returns:
+   *   { id, email, firstName, lastName, role, isActive, createdAt }
+   *
+   * It does NOT return `username` or `operator_id`.
+   * A plain ADMIN account (no operator_id) is treated as SUPERADMIN.
+   */
+  const currentUser: AuthUser | null = rawAuthUser
+    ? (() => {
+        const u = rawAuthUser as any;
+        const rawRole: string = u.role ?? "";
+        const operatorId: string | undefined =
+          u.operator_id ?? u.operatorId ?? undefined;
+
+        // Determine effective role:
+        // - "ADMIN" without an operator_id → this is the global SUPERADMIN
+        // - "ADMIN" with an operator_id    → operator-scoped admin
+        // - anything else                  → keep as-is (e.g. "MANAGER")
+        let effectiveRole: Role;
+        if (rawRole === "ADMIN" && !operatorId) {
+          effectiveRole = "SUPERADMIN";
+        } else {
+          effectiveRole = rawRole as Role;
+        }
+
+        return {
+          id: u.id ?? u.user_id ?? "",
+          email: u.email ?? "",
+          firstName: u.firstName ?? u.first_name ?? "",
+          lastName: u.lastName ?? u.last_name ?? "",
+          role: effectiveRole,
+          operator_id: operatorId,
+          operator_name: u.operator_name ?? u.operatorName ?? undefined,
+          isActive: u.isActive ?? u.is_active ?? true,
+          createdAt: u.createdAt ?? u.created_at ?? "",
+        };
+      })()
+    : null;
+
+  if (loading) {
+    return (
+      <div className="bg-background text-foreground h-full flex items-center justify-center">
+        <RefreshCw className="w-6 h-6 animate-spin text-foreground/40" />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="bg-background text-foreground h-full flex items-center justify-center">
+        <p className="text-foreground/50 text-sm">Not authenticated.</p>
+      </div>
+    );
+  }
+
+  // Route to the correct view based on effective role
+  if (currentUser.role === "SUPERADMIN") {
+    return <SuperAdminView currentUser={currentUser} />;
+  }
+
+  if (currentUser.role === "ADMIN") {
+    return <OperatorAdminView currentUser={currentUser} />;
+  }
+
+  // MANAGER — read-only profile view
+  const displayName =
+    [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") ||
+    currentUser.email ||
+    "Manager";
+
+  return (
+    <div className="bg-background text-foreground h-full flex flex-col">
+      <PageHeader title="Users" subtitle="Your account information" />
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center space-y-2">
+          <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto">
+            <User size={24} className="text-blue-500" />
+          </div>
+          <p className="text-sm font-bold text-foreground">{displayName}</p>
+          <p className="text-[11px] text-foreground/50 uppercase tracking-wider">
+            Manager{currentUser.operator_name ? ` · ${currentUser.operator_name}` : ""}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SuperAdmin View ──────────────────────────────────────────────────────────
+
+type ModalMode = "operator" | "admin" | null;
+
+function SuperAdminView({ currentUser }: { currentUser: AuthUser }) {
+  const [groups, setGroups] = useState<OperatorGroup[]>([]);
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [modalTarget, setModalTarget] = useState<Operator | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Operator form
+  const [opName, setOpName] = useState("");
+  const [opEmail, setOpEmail] = useState("");
+  const [opContact, setOpContact] = useState("");
+
+  // Admin form
+  const [auEmployeeName, setAuEmployeeName] = useState("");
+  const [auEmail, setAuEmail] = useState("");
+  const [auContact, setAuContact] = useState("");
+  const [auUsername, setAuUsername] = useState("");
+  const [auPassword, setAuPassword] = useState("");
+  const [auShowPw, setAuShowPw] = useState(false);
+
+  const load = async () => {
     try {
-      const res = await fetch(API_URL);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setUsers(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch users:", err);
-    } finally {
-      setLoading(false);
+      const [opsRes, usersRes] = await Promise.all([
+        fetch(`${API}/api/operators`, { headers: authHeaders() }),
+        fetch(`${API}/api/operator-users`, { headers: authHeaders() }),
+      ]);
+      const ops: Operator[] = await opsRes.json();
+      const users: OperatorUser[] = await usersRes.json();
+
+      const built: OperatorGroup[] = ops.map((op) => {
+        const opUsers = users.filter(
+          (u) => u.operator_id === op.operator_id
+        );
+        return {
+          operator: op,
+          admin: opUsers.find((u) => u.role === "ADMIN") ?? null,
+          managers: opUsers.filter((u) => u.role === "MANAGER"),
+        };
+      });
+      setGroups(built);
+
+      const exp: Record<string, boolean> = {};
+      ops.forEach((op) => (exp[op.operator_id] = true));
+      setExpanded(exp);
+    } catch {
+      setError("Failed to load data");
     }
   };
 
   useEffect(() => {
-    fetchUsers();
+    load();
   }, []);
 
-  const handleAddSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
-        setIsAddOpen(false);
-        setFormData({ name: '', email: '', username: '', password: '', role: 'Viewer' });
-        fetchUsers(); // Reload from DB
-      } else {
-        const errorData = await res.json();
-        alert(errorData.error || "Failed to create user");
-      }
-    } catch (err) {
-      alert("Error: Backend server is not running");
-    } finally {
-      setLoading(false);
-    }
+  const openOperatorModal = () => {
+    setOpName("");
+    setOpEmail("");
+    setOpContact("");
+    setError(null);
+    setModalMode("operator");
   };
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
+  const openAdminModal = (op: Operator) => {
+    setModalTarget(op);
+    setAuEmployeeName("");
+    setAuEmail("");
+    setAuContact("");
+    setAuUsername("");
+    setAuPassword("");
+    setAuShowPw(false);
+    setError(null);
+    setModalMode("admin");
+  };
 
-    setLoading(true);
+  const closeModal = () => {
+    setModalMode(null);
+    setModalTarget(null);
+  };
+
+  const handleCreateOperator = async () => {
+    if (!opName.trim() || !opEmail.trim() || !opContact.trim()) {
+      setError("All fields are required");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_URL}/${editingUser.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch(`${API}/api/operators`, {
+        method: "POST",
+        headers: authHeaders(),
         body: JSON.stringify({
-          firstName: formData.name.split(' ')[0] || '',
-          lastName: formData.name.split(' ').slice(1).join(' ') || '',
-          email: formData.email,
-          username: formData.username,
-          role: formData.role.toUpperCase(),
-          ...(formData.password && { password: formData.password })
+          operator_name: opName.trim(),
+          email: opEmail.trim(),
+          contact_number: opContact.trim(),
         }),
       });
-
-      if (res.ok) {
-        setEditingUser(null);
-        setFormData({ name: '', email: '', username: '', password: '', role: 'Viewer' });
-        fetchUsers();
-      } else {
-        const errorData = await res.json();
-        alert(errorData.error || "Failed to update user");
-      }
-    } catch (err) {
-      alert("Error: Backend server is not running");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create operator");
+      closeModal();
+      await load();
+    } catch (e: any) {
+      setError(e.message);
     } finally {
-      setLoading(false);
+      setIsBusy(false);
     }
   };
 
-  const handleDeleteUser = async () => {
-    if (!deletingUser) return;
-
-    setLoading(true);
+  const handleCreateAdmin = async () => {
+    if (!modalTarget) return;
+    if (
+      !auEmployeeName.trim() ||
+      !auEmail.trim() ||
+      !auContact.trim() ||
+      !auUsername.trim() ||
+      !auPassword.trim()
+    ) {
+      setError("All fields are required");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
     try {
-      const res = await fetch(`${API_URL}/${deletingUser.id}`, {
-        method: "DELETE",
+      const res = await fetch(`${API}/api/operator-users`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          operator_id: modalTarget.operator_id,
+          employee_name: auEmployeeName.trim(),
+          email: auEmail.trim(),
+          contact_number: auContact.trim(),
+          username: auUsername.trim(),
+          password: auPassword,
+          role: "ADMIN",
+        }),
       });
-
-      if (res.ok) {
-        setDeletingUser(null);
-        fetchUsers();
-      } else {
-        alert("Failed to delete user");
-      }
-    } catch (err) {
-      alert("Error: Backend server is not running");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      closeModal();
+      await load();
+    } catch (e: any) {
+      setError(e.message);
     } finally {
-      setLoading(false);
+      setIsBusy(false);
     }
   };
 
-  const startEdit = (user: User) => {
-    setEditingUser(user);
-    setFormData({
-      name: `${user.firstName} ${user.lastName}`.trim(),
-      email: user.email || '',
-      username: user.username,
-      password: '',
-      role: getUIRole(user.role) as Role
-    });
-  };
-
-  // --- UI HELPERS ---
-
-  const roleStyles: any = {
-    Administrator: {
-      text: t('text-rose-400', 'text-rose-600'),
-      bg: t('bg-rose-900/20', 'bg-rose-50'),
-      border: t('border-rose-900/30', 'border-rose-200/50'),
-      icon: t('text-rose-400', 'text-rose-500')
-    },
-    ADMIN: {
-      text: t('text-rose-400', 'text-rose-600'),
-      bg: t('bg-rose-900/20', 'bg-rose-50'),
-      border: t('border-rose-900/30', 'border-rose-200/50'),
-      icon: t('text-rose-400', 'text-rose-500')
-    },
-    Manager: {
-      text: t('text-indigo-400', 'text-indigo-600'),
-      bg: t('bg-indigo-900/20', 'bg-indigo-50'),
-      border: t('border-indigo-900/30', 'border-indigo-200/50'),
-      icon: t('text-indigo-400', 'text-indigo-500')
-    },
-    MANAGER: {
-      text: t('text-indigo-400', 'text-indigo-600'),
-      bg: t('bg-indigo-900/20', 'bg-indigo-50'),
-      border: t('border-indigo-900/30', 'border-indigo-200/50'),
-      icon: t('text-indigo-400', 'text-indigo-500')
-    },
-    Viewer: {
-      text: t('text-slate-400', 'text-slate-600'),
-      bg: t('bg-slate-800/40', 'bg-slate-50'),
-      border: t('border-slate-700', 'border-slate-200/50'),
-      icon: t('text-slate-500', 'text-slate-500')
-    },
-    USER: {
-      text: t('text-slate-400', 'text-slate-600'),
-      bg: t('bg-slate-800/40', 'bg-slate-50'),
-      border: t('border-slate-700', 'border-slate-200/50'),
-      icon: t('text-slate-500', 'text-slate-500')
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm("Delete this user?")) return;
+    try {
+      await fetch(`${API}/api/operator-users/${userId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      await load();
+    } catch {
+      alert("Failed to delete user");
     }
   };
 
-  const getUIRole = (dbRole: string): string => {
-    if (dbRole === 'ADMIN') return 'Administrator';
-    if (dbRole === 'MANAGER') return 'Manager';
-    return 'Viewer';
+  const handleDeleteOperator = async (operatorId: string) => {
+    if (
+      !confirm(
+        "Delete this operator? This will also remove all their users."
+      )
+    )
+      return;
+    try {
+      await fetch(`${API}/api/operators/${operatorId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      await load();
+    } catch {
+      alert("Failed to delete operator");
+    }
   };
+
+  const filtered = groups.filter(
+    (g) =>
+      search === "" ||
+      g.operator.operator_name
+        .toLowerCase()
+        .includes(search.toLowerCase())
+  );
+
+  const totalAdmins = groups.filter((g) => g.admin).length;
+  const totalManagers = groups.reduce((s, g) => s + g.managers.length, 0);
+
+  // Display name for the current superadmin
+  const adminDisplayName =
+    [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") ||
+    currentUser.email ||
+    "SuperAdmin";
 
   return (
-    <div className={`flex flex-col h-full min-h-screen pb-12 transition-colors duration-300 ${t("bg-[#0f172a]", "bg-slate-50/50")}`}>
-      {/* Header */}
-      <div className={`border-b p-6 md:p-8 transition-colors duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-xl ${t("bg-blue-900/20", "bg-blue-50")}`}>
-              <Users className={`w-8 h-8 ${t("text-blue-400", "text-blue-600")}`} />
-            </div>
-            <div>
-              <h1 className={`text-2xl font-bold ${t("text-white", "text-slate-800")}`}>User Management</h1>
-              <p className={`text-sm mt-1 ${t("text-slate-400", "text-slate-500")}`}>Manage system users and permissions</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              setFormData({ name: '', email: '', username: '', password: '', role: 'Viewer' });
-              setIsAddOpen(true);
-            }}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all active:scale-95 shadow-lg shadow-blue-500/20"
-          >
-            <Plus className="w-5 h-5" />
-            Add New User
-          </button>
-        </div>
+    <div className="bg-background text-foreground h-full flex flex-col">
+      <PageHeader
+        title="User Management"
+        subtitle={`SuperAdmin · ${adminDisplayName}`}
+      />
+
+      <div className="border-b px-4 py-3 grid grid-cols-3 gap-3 bg-muted/30 border-border-custom">
+        <StatChip label="Operators" count={groups.length} color="blue" />
+        <StatChip label="Admins" count={totalAdmins} color="amber" />
+        <StatChip label="Managers" count={totalManagers} color="green" />
       </div>
 
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 md:px-8 mt-8 space-y-8">
-        <div className={`border rounded-2xl shadow-sm overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-200")}`}>
-          <div className={`p-5 md:p-6 border-b flex items-center justify-between transition-colors ${t("bg-[#1e293b] border-slate-700", "bg-white border-slate-100")}`}>
-            <div className="flex items-center gap-3">
-              <Users className={`w-6 h-6 ${t("text-blue-400", "text-blue-600")}`} />
-              <h2 className={`text-lg font-bold ${t("text-white", "text-slate-800")}`}>System Users</h2>
-            </div>
-            <span className={`px-3 py-1 text-sm font-medium rounded-full ${t("bg-slate-800 text-slate-400", "bg-slate-100 text-slate-600")}`}>
-              {users.length} Users
-            </span>
+      <div className="border-b px-4 py-3 flex items-center gap-3 bg-background border-border-custom">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
+          <input
+            type="text"
+            placeholder="Search operator..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-background border-border-custom text-foreground placeholder-foreground/40"
+          />
+        </div>
+        <button
+          onClick={load}
+          className="p-2.5 rounded-xl border border-border-custom text-foreground/50 hover:text-foreground hover:bg-muted transition-all"
+          title="Refresh"
+        >
+          <RefreshCw size={14} />
+        </button>
+        <button
+          onClick={openOperatorModal}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-black text-[11px] uppercase tracking-wider shadow-lg transition-all transform active:scale-[0.98]"
+        >
+          <Plus size={13} /> Add Operator
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-48 text-foreground/30">
+            <Building2 size={32} className="mb-3 opacity-30" />
+            <p className="text-[11px] font-bold uppercase tracking-wider">
+              No operators yet
+            </p>
+            <p className="text-[10px] mt-1">
+              Click "Add Operator" to create one
+            </p>
           </div>
-
-          <div className={`p-5 md:p-6 transition-colors ${t("bg-[#1e293b]/50", "bg-slate-50/50")}`}>
-            {loading ? (
-              <div className="flex flex-col items-center py-20 gap-3">
-                <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-                <p className={t("text-slate-400", "text-slate-500")}>Loading users from database...</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {users.map(user => (
-                  <div key={user.id} className={`flex flex-col md:flex-row md:items-center border rounded-xl p-4 gap-4 hover:shadow-md transition-all ${t("bg-[#1e293b] border-slate-700 hover:bg-slate-800/50", "bg-white border-slate-200 hover:shadow-md")}`}>
-                    <div className="flex-2 flex gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-sm">
-                        <UserIcon className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <h3 className={`text-sm font-bold ${t("text-slate-100", "text-slate-800")}`}>{user.firstName} {user.lastName}</h3>
-                        <p className={`text-xs mt-0.5 ${t("text-slate-400", "text-slate-500")}`}>{user.email || 'No email'}</p>
-                        <p className={`text-[10px] mt-1 font-mono ${t("text-blue-400", "text-blue-600")}`}>@{user.username}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${roleStyles[user.role]?.bg || 'bg-slate-100'} ${roleStyles[user.role]?.text || 'text-slate-600'}`}>
-                        {getUIRole(user.role)}
-                      </span>
-                    </div>
-
-                    <div className={`flex-1 border-t pt-3 md:border-t-0 md:pt-0 transition-colors ${t("border-slate-800", "border-slate-100")}`}>
-                      <p className={`text-xs font-medium ${t("text-slate-300", "text-slate-600")}`}>Joined: {new Date(user.createdAt).toLocaleDateString()}</p>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <div className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-slate-400'}`} />
-                        <span className="text-[10px] uppercase font-bold text-slate-500">{user.isActive ? 'Active' : 'Inactive'}</span>
-                      </div>
-                    </div>
-
-                    <div className={`w-full md:w-24 flex md:justify-end gap-2 border-t pt-3 md:border-t-0 md:pt-0 transition-colors ${t("border-slate-800", "border-slate-100")}`}>
-                      <button onClick={() => startEdit(user)} className={`p-2 rounded-lg transition-colors ${t("text-slate-500 hover:text-blue-400 hover:bg-blue-900/40", "text-slate-400 hover:text-blue-600 hover:bg-blue-50")}`} title="Edit User">
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setDeletingUser(user)} className={`p-2 rounded-lg transition-colors ${t("text-slate-500 hover:text-rose-400 hover:bg-rose-900/40", "text-slate-400 hover:text-rose-600 hover:bg-rose-50")}`} title="Delete User">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+        )}
+        {filtered.map((g) => {
+          const isExpanded = expanded[g.operator.operator_id];
+          return (
+            <div
+              key={g.operator.operator_id}
+              className="rounded-2xl border border-border-custom bg-card overflow-hidden"
+            >
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() =>
+                    setExpanded((prev) => ({
+                      ...prev,
+                      [g.operator.operator_id]:
+                        !prev[g.operator.operator_id],
+                    }))
+                  }
+                  className="flex-1 px-4 py-3.5 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                    <Building2 size={15} className="text-blue-500" />
                   </div>
-                ))}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-foreground">
+                      {g.operator.operator_name}
+                    </p>
+                    <p className="text-[10px] text-foreground/50 font-medium mt-0.5">
+                      {g.admin ? "1 Admin" : "No Admin"} ·{" "}
+                      {g.managers.length} Manager
+                      {g.managers.length !== 1 ? "s" : ""}
+                      {g.operator.email && (
+                        <span className="ml-2 opacity-60">
+                          · {g.operator.email}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronDown
+                      size={16}
+                      className="text-foreground/40"
+                    />
+                  ) : (
+                    <ChevronRight
+                      size={16}
+                      className="text-foreground/40"
+                    />
+                  )}
+                </button>
+                <button
+                  onClick={() => openAdminModal(g.operator)}
+                  className="mr-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all text-[10px] font-black uppercase tracking-wider border border-amber-500/20 shrink-0"
+                >
+                  <UserPlus size={11} />
+                  {g.admin ? "Replace Admin" : "Add Admin"}
+                </button>
+                <button
+                  onClick={() =>
+                    handleDeleteOperator(g.operator.operator_id)
+                  }
+                  className="mr-3 p-1.5 rounded-lg text-red-500/50 hover:text-red-500 hover:bg-red-500/10 transition-all shrink-0"
+                  title="Delete Operator"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
-            )}
-          </div>
-        </div>
+
+              {isExpanded && (
+                <div className="border-t border-border-custom px-4 py-3 space-y-2.5 bg-background/40">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-1 h-4 bg-amber-500 rounded-full shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">
+                      Operator Admin (role = ADMIN)
+                    </span>
+                  </div>
+                  {g.admin ? (
+                    <UserRow
+                      user={g.admin}
+                      roleColor="amber"
+                      onDelete={() => handleDeleteUser(g.admin!.user_id)}
+                    />
+                  ) : (
+                    <p className="text-[11px] text-foreground/30 pl-3 italic">
+                      No admin assigned — use "Add Admin" above
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-3 mb-1">
+                    <div className="w-1 h-4 bg-emerald-500 rounded-full shrink-0" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500">
+                      Managers (role = MANAGER)
+                    </span>
+                  </div>
+                  {g.managers.length === 0 ? (
+                    <p className="text-[11px] text-foreground/30 pl-3 italic">
+                      No managers — created by the Operator Admin
+                    </p>
+                  ) : (
+                    g.managers.map((m) => (
+                      <UserRow
+                        key={m.user_id}
+                        user={m}
+                        roleColor="green"
+                        onDelete={() => handleDeleteUser(m.user_id)}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Add User Modal */}
-      {isAddOpen && (
-        <UserModal
-          isDark={isDark}
-          title="Add New User"
-          onClose={() => setIsAddOpen(false)}
-          onSubmit={handleAddSubmit}
-          formData={formData}
-          setFormData={setFormData}
-          isLoading={loading}
-        />
-      )}
-
-      {/* Edit User Modal */}
-      {editingUser && (
-        <UserModal
-          isDark={isDark}
-          title="Edit User"
-          onClose={() => {
-            setEditingUser(null);
-            setFormData({ name: '', email: '', username: '', password: '', role: 'Viewer' });
-          }}
-          onSubmit={handleEditSubmit}
-          formData={formData}
-          setFormData={setFormData}
-          isLoading={loading}
-          isEdit={true}
-        />
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deletingUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className={`rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
-            <div className={`p-6 border-b flex justify-between items-center transition-colors ${t("bg-slate-800/50 border-slate-700", "bg-slate-50 border-slate-100")}`}>
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-rose-500/20">
-                  <AlertTriangle className="w-5 h-5 text-rose-500" />
-                </div>
-                <h2 className="text-lg font-black uppercase tracking-tight">Delete User</h2>
-              </div>
-              <button onClick={() => setDeletingUser(null)} className={`p-2 rounded-xl transition-colors ${t("text-slate-400 hover:bg-slate-800 hover:text-white", "text-slate-400 hover:bg-slate-100 hover:text-slate-800")}`}>
-                <X className="w-5 h-5" />
+      {/* Modal: Add Operator */}
+      {modalMode === "operator" && (
+        <Modal
+          title="Add Operator"
+          subtitle="Operator · operator_name, email, contact"
+          icon={<Building2 size={20} className="text-blue-500" />}
+          onClose={closeModal}
+        >
+          <div className="space-y-3">
+            {error && <ErrorBanner message={error} />}
+            <SectionLabel label="Company Info" color="blue" />
+            <InputField
+              label="Operator Name"
+              value={opName}
+              onChange={(e: any) => setOpName(e.target.value)}
+              placeholder="e.g. MANTRASCO"
+              required
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <InputField
+                label="Email"
+                type="email"
+                value={opEmail}
+                onChange={(e: any) => setOpEmail(e.target.value)}
+                placeholder="admin@company.com"
+                required
+              />
+              <InputField
+                label="Contact Number"
+                value={opContact}
+                onChange={(e: any) => setOpContact(e.target.value)}
+                placeholder="09XXXXXXXXX"
+                required
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCreateOperator}
+                disabled={isBusy}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-black text-[11px] uppercase tracking-wider disabled:opacity-50 transition-all"
+              >
+                {isBusy ? "Creating..." : "Create Operator"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-5 py-3 rounded-xl border border-border-custom text-foreground/60 font-black text-[11px] uppercase tracking-wider hover:bg-muted transition-all"
+              >
+                Cancel
               </button>
             </div>
-            <div className="p-6">
-              <p className={`text-sm mb-6 ${t("text-slate-300", "text-slate-600")}`}>
-                Are you sure you want to delete user <span className="font-bold">{deletingUser.firstName} {deletingUser.lastName}</span>? This action cannot be undone.
-              </p>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setDeletingUser(null)} className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${t("text-slate-400 hover:bg-slate-800", "text-slate-500 hover:bg-slate-100")}`}>
-                  Cancel
-                </button>
-                <button onClick={handleDeleteUser} disabled={loading} className="px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm flex items-center gap-2 transition-all">
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Delete User
-                </button>
-              </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal: Add Admin */}
+      {modalMode === "admin" && modalTarget && (
+        <Modal
+          title="Add Operator Admin"
+          subtitle={`Operator_User · role=ADMIN · ${modalTarget.operator_name}`}
+          icon={<Shield size={20} className="text-amber-500" />}
+          onClose={closeModal}
+        >
+          <div className="space-y-3">
+            {error && <ErrorBanner message={error} />}
+            <SectionLabel label="Personal Info" color="amber" />
+            <InputField
+              label="Employee Name"
+              value={auEmployeeName}
+              onChange={(e: any) => setAuEmployeeName(e.target.value)}
+              placeholder="Full name"
+              required
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <InputField
+                label="Email"
+                type="email"
+                value={auEmail}
+                onChange={(e: any) => setAuEmail(e.target.value)}
+                placeholder="admin@email.com"
+                required
+              />
+              <InputField
+                label="Contact Number"
+                value={auContact}
+                onChange={(e: any) => setAuContact(e.target.value)}
+                placeholder="09XXXXXXXXX"
+                required
+              />
+            </div>
+            <SectionLabel label="Login Credentials" color="blue" />
+            <InputField
+              label="Username"
+              value={auUsername}
+              onChange={(e: any) =>
+                setAuUsername(e.target.value.toLowerCase())
+              }
+              placeholder="e.g. mantrasco_admin"
+              required
+            />
+            <PasswordField
+              label="Password"
+              value={auPassword}
+              show={auShowPw}
+              onToggle={() => setAuShowPw(!auShowPw)}
+              onChange={(e: any) => setAuPassword(e.target.value)}
+            />
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCreateAdmin}
+                disabled={isBusy}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-[11px] uppercase tracking-wider disabled:opacity-50 transition-all"
+              >
+                {isBusy ? "Creating..." : "Create Admin"}
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-5 py-3 rounded-xl border border-border-custom text-foreground/60 font-black text-[11px] uppercase tracking-wider hover:bg-muted transition-all"
+              >
+                Cancel
+              </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
 }
 
-// Updated UserModal with ChevronDown icon for Role Allocation
-function UserModal({ isDark, title, onClose, onSubmit, formData, setFormData, isLoading, isEdit }: any) {
-  const t = (dark: string, light: string) => (isDark ? dark : light);
+// ─── Operator Admin View ──────────────────────────────────────────────────────
+
+function OperatorAdminView({ currentUser }: { currentUser: AuthUser }) {
+  const [managers, setManagers] = useState<OperatorUser[]>([]);
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [employeeName, setEmployeeName] = useState("");
+  const [email, setEmail] = useState("");
+  const [contact, setContact] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+
+  const load = async () => {
+    try {
+      const res = await fetch(`${API}/api/operator-users`, {
+        headers: authHeaders(),
+      });
+      const all: OperatorUser[] = await res.json();
+      setManagers(
+        all.filter(
+          (u) =>
+            u.operator_id === currentUser.operator_id &&
+            u.role === "MANAGER"
+        )
+      );
+    } catch {
+      setError("Failed to load managers");
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const openModal = () => {
+    setEmployeeName("");
+    setEmail("");
+    setContact("");
+    setUsername("");
+    setPassword("");
+    setShowPw(false);
+    setError(null);
+    setShowModal(true);
+  };
+
+  const handleCreate = async () => {
+    if (
+      !employeeName.trim() ||
+      !email.trim() ||
+      !contact.trim() ||
+      !username.trim() ||
+      !password.trim()
+    ) {
+      setError("All fields are required");
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/api/operator-users`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          operator_id: currentUser.operator_id,
+          employee_name: employeeName.trim(),
+          email: email.trim(),
+          contact_number: contact.trim(),
+          username: username.trim(),
+          password,
+          role: "MANAGER",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      setShowModal(false);
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    if (!confirm("Delete this manager?")) return;
+    try {
+      await fetch(`${API}/api/operator-users/${userId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      await load();
+    } catch {
+      alert("Failed to delete manager");
+    }
+  };
+
+  const filtered = managers.filter(
+    (m) =>
+      search === "" ||
+      m.employee_name.toLowerCase().includes(search.toLowerCase()) ||
+      m.username.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const operatorLabel =
+    currentUser.operator_name ?? "Operator";
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className={`rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transition-colors duration-300 ${t("bg-[#1e293b] text-white", "bg-white")}`}>
-        <div className={`p-6 border-b flex justify-between items-center transition-colors ${t("bg-slate-800/50 border-slate-700", "bg-slate-50 border-slate-100")}`}>
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${t("bg-blue-900/20", "bg-blue-50")}`}>
-              <Shield className={`w-5 h-5 ${t("text-blue-400", "text-blue-600")}`} />
-            </div>
-            <h2 className="text-lg font-black uppercase tracking-tight">{title}</h2>
-          </div>
-          <button onClick={onClose} className={`p-2 rounded-xl transition-colors ${t("text-slate-400 hover:bg-slate-800 hover:text-white", "text-slate-400 hover:bg-slate-100 hover:text-slate-800")}`}>
-            <X className="w-5 h-5" />
-          </button>
+    <div className="bg-background text-foreground h-full flex flex-col">
+      <PageHeader
+        title="User Management"
+        subtitle={`${operatorLabel} · Manager Accounts`}
+      />
+
+      <div className="border-b px-4 py-3 bg-muted/30 border-border-custom">
+        <StatChip label="Managers" count={managers.length} color="green" />
+      </div>
+
+      <div className="border-b px-4 py-3 flex items-center gap-3 bg-background border-border-custom">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
+          <input
+            type="text"
+            placeholder="Search managers..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all bg-background border-border-custom text-foreground placeholder-foreground/40"
+          />
+        </div>
+        <button
+          onClick={load}
+          className="p-2.5 rounded-xl border border-border-custom text-foreground/50 hover:text-foreground hover:bg-muted transition-all"
+          title="Refresh"
+        >
+          <RefreshCw size={14} />
+        </button>
+        <button
+          onClick={openModal}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-black text-[11px] uppercase tracking-wider shadow-lg transition-all transform active:scale-[0.98]"
+        >
+          <UserPlus size={13} /> Add Manager
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm border-b border-border-custom px-4 py-2 grid grid-cols-[1fr_1fr_1fr_auto] gap-3">
+          {["Employee Name", "Username", "Contact", "Action"].map((h) => (
+            <span
+              key={h}
+              className="text-[9px] font-black uppercase tracking-widest text-foreground/40"
+            >
+              {h}
+            </span>
+          ))}
         </div>
 
-        <form onSubmit={onSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
-          <div>
-            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
-              Full Name
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={e => setFormData({ ...formData, name: e.target.value })}
-              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
-              placeholder="Juan Dela Cruz"
-            />
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-foreground/30">
+            <Users size={32} className="mb-3 opacity-30" />
+            <p className="text-[11px] font-bold uppercase tracking-wider">
+              No managers yet
+            </p>
+            <p className="text-[10px] mt-1">
+              Click "Add Manager" to create one
+            </p>
           </div>
-
-          <div>
-            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
-              Username
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.username}
-              onChange={e => setFormData({ ...formData, username: e.target.value })}
-              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
-              placeholder="@username"
-            />
-          </div>
-
-          <div>
-            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={e => setFormData({ ...formData, email: e.target.value })}
-              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
-              placeholder="user@example.com"
-            />
-          </div>
-
-          <div>
-            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
-              {isEdit ? "New Password (optional)" : "Password"}
-            </label>
-            <input
-              type="password"
-              required={!isEdit}
-              value={formData.password}
-              onChange={e => setFormData({ ...formData, password: e.target.value })}
-              className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none border-2 transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
-              placeholder={isEdit ? "Leave blank to keep current" : "Enter password"}
-            />
-          </div>
-
-          <div>
-            <label className={`block text-[10px] font-black uppercase tracking-widest mb-2 ${t("text-slate-400", "text-slate-600")}`}>
-              Role Allocation
-            </label>
-            <div className="relative">
-              <select
-                className={`w-full rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none border-2 appearance-none cursor-pointer transition-all ${t("bg-slate-800 border-slate-700 text-white focus:border-blue-500", "bg-white border-slate-200 text-slate-800 focus:border-blue-500")}`}
-                value={formData.role}
-                onChange={e => setFormData({ ...formData, role: e.target.value as Role })}
+        ) : (
+          filtered.map((m) => (
+            <div
+              key={m.user_id}
+              className="px-4 py-3 border-b border-border-custom grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                  <User size={13} className="text-emerald-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold text-foreground truncate">
+                    {m.employee_name}
+                  </p>
+                  <p className="text-[10px] text-foreground/40 truncate">
+                    {m.email}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-mono text-foreground/70 truncate">
+                {m.username}
+              </span>
+              <span className="text-[11px] text-foreground/60 truncate">
+                {m.contact_number}
+              </span>
+              <button
+                onClick={() => handleDelete(m.user_id)}
+                className="p-1.5 rounded-lg text-red-500/60 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                title="Delete Manager"
               >
-                <option value="Administrator" className={t("bg-slate-800", "bg-white")}>Administrator</option>
-                <option value="Manager" className={t("bg-slate-800", "bg-white")}>Manager</option>
-                <option value="Viewer" className={t("bg-slate-800", "bg-white")}>Viewer</option>
-              </select>
-              <ChevronDown className={`absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${t("text-slate-400", "text-slate-500")}`} />
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {showModal && (
+        <Modal
+          title="Add Manager"
+          subtitle={`Operator_User · role=MANAGER · ${operatorLabel}`}
+          icon={<User size={20} className="text-emerald-500" />}
+          onClose={() => setShowModal(false)}
+        >
+          <div className="space-y-3">
+            {error && <ErrorBanner message={error} />}
+            <SectionLabel label="Personal Info" color="green" />
+            <InputField
+              label="Employee Name"
+              value={employeeName}
+              onChange={(e: any) => setEmployeeName(e.target.value)}
+              placeholder="Full name"
+              required
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <InputField
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e: any) => setEmail(e.target.value)}
+                placeholder="manager@email.com"
+                required
+              />
+              <InputField
+                label="Contact Number"
+                value={contact}
+                onChange={(e: any) => setContact(e.target.value)}
+                placeholder="09XXXXXXXXX"
+                required
+              />
+            </div>
+            <SectionLabel label="Login Credentials" color="blue" />
+            <InputField
+              label="Username"
+              value={username}
+              onChange={(e: any) =>
+                setUsername(e.target.value.toLowerCase())
+              }
+              placeholder="e.g. juan_manager"
+              required
+            />
+            <PasswordField
+              label="Password"
+              value={password}
+              show={showPw}
+              onToggle={() => setShowPw(!showPw)}
+              onChange={(e: any) => setPassword(e.target.value)}
+            />
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCreate}
+                disabled={isBusy}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-black text-[11px] uppercase tracking-wider disabled:opacity-50 transition-all"
+              >
+                {isBusy ? "Creating..." : "Create Manager"}
+              </button>
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-5 py-3 rounded-xl border border-border-custom text-foreground/60 font-black text-[11px] uppercase tracking-wider hover:bg-muted transition-all"
+              >
+                Cancel
+              </button>
             </div>
           </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
 
-          <div className="pt-4 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all ${t("text-slate-400 hover:bg-slate-800", "text-slate-500 hover:bg-slate-100")}`}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm flex items-center gap-2 transition-all active:scale-95"
-            >
-              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isEdit ? "Update User" : "Create User"}
-            </button>
-          </div>
-        </form>
+// ─── Shared Components ────────────────────────────────────────────────────────
+
+function PageHeader({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="px-4 border-b bg-background border-border-custom">
+      <div className="max-w-[1600px] mx-auto py-6 flex flex-col items-center justify-center text-center">
+        <h1 className="text-xl font-black tracking-tight uppercase text-foreground">
+          {title}
+        </h1>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-foreground/50 mt-1">
+          {subtitle}
+        </p>
       </div>
     </div>
   );
 }
+
+function SectionLabel({
+  label,
+  color,
+}: {
+  label: string;
+  color: "blue" | "amber" | "green";
+}) {
+  const c = {
+    blue: "bg-blue-500 text-blue-500",
+    amber: "bg-amber-500 text-amber-500",
+    green: "bg-emerald-500 text-emerald-500",
+  }[color];
+  return (
+    <div className="flex items-center gap-2">
+      <div className={`w-1 h-4 rounded-full ${c.split(" ")[0]}`} />
+      <span
+        className={`text-[10px] font-black uppercase tracking-wider ${
+          c.split(" ")[1]
+        }`}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function StatChip({
+  label,
+  count,
+  color,
+}: {
+  label: string;
+  count: number;
+  color: "blue" | "amber" | "green";
+}) {
+  const colors = {
+    blue: {
+      bg: "bg-blue-500/10",
+      text: "text-blue-500",
+      border: "border-blue-500/20",
+    },
+    amber: {
+      bg: "bg-amber-500/10",
+      text: "text-amber-500",
+      border: "border-amber-500/20",
+    },
+    green: {
+      bg: "bg-emerald-500/10",
+      text: "text-emerald-500",
+      border: "border-emerald-500/20",
+    },
+  }[color];
+  return (
+    <div
+      className={`flex items-center gap-3 p-3 rounded-xl border ${colors.bg} ${colors.border}`}
+    >
+      <div>
+        <div
+          className={`text-2xl font-black leading-none tracking-tight ${colors.text}`}
+        >
+          {count}
+        </div>
+        <div
+          className={`text-[10px] font-bold uppercase tracking-wider mt-1 ${colors.text}/70`}
+        >
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserRow({
+  user,
+  roleColor,
+  onDelete,
+}: {
+  user: OperatorUser;
+  roleColor: "amber" | "green";
+  onDelete: () => void;
+}) {
+  const colors = {
+    amber: {
+      bg: "bg-amber-500/10",
+      text: "text-amber-500",
+      badge: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+    },
+    green: {
+      bg: "bg-emerald-500/10",
+      text: "text-emerald-500",
+      badge: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+    },
+  }[roleColor];
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-border-custom bg-background/60 hover:bg-muted/30 transition-colors">
+      <div
+        className={`w-7 h-7 rounded-lg ${colors.bg} flex items-center justify-center shrink-0`}
+      >
+        {roleColor === "amber" ? (
+          <Shield size={13} className={colors.text} />
+        ) : (
+          <User size={13} className={colors.text} />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[12px] font-bold text-foreground truncate">
+          {user.employee_name}
+        </p>
+        <div className="flex items-center gap-3 mt-0.5">
+          <span className="text-[10px] font-mono text-foreground/50 truncate">
+            {user.username}
+          </span>
+          {user.email && (
+            <span className="text-[10px] text-foreground/40 truncate flex items-center gap-1">
+              <Mail size={9} />
+              {user.email}
+            </span>
+          )}
+          {user.contact_number && (
+            <span className="text-[10px] text-foreground/40 truncate flex items-center gap-1">
+              <Phone size={9} />
+              {user.contact_number}
+            </span>
+          )}
+        </div>
+      </div>
+      <span
+        className={`px-2 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-wider ${colors.badge}`}
+      >
+        {user.role}
+      </span>
+      <button
+        onClick={onDelete}
+        className="p-1.5 rounded-lg text-red-500/50 hover:text-red-500 hover:bg-red-500/10 transition-all ml-1"
+        title="Delete"
+      >
+        <Trash2 size={13} />
+      </button>
+    </div>
+  );
+}
+
+function Modal({
+  title,
+  subtitle,
+  icon,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300 p-4">
+      <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 bg-card border border-border-custom">
+        <div className="relative px-5 pt-5 pb-3 border-b border-border-custom bg-gradient-to-r from-blue-500/5 to-transparent">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                {icon}
+              </div>
+              <div>
+                <h2 className="text-lg font-extrabold text-foreground">
+                  {title}
+                </h2>
+                <p className="text-[10px] text-foreground/50 font-medium mt-0.5">
+                  {subtitle}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-muted transition-all text-foreground/50 hover:text-foreground"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="p-5 max-h-[calc(100vh-200px)] overflow-y-auto">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-medium flex items-center gap-2">
+      <AlertCircle size={13} /> {message}
+    </div>
+  );
+}
+
+const InputField = ({
+  label,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  required,
+  disabled,
+}: any) => (
+  <div className="flex flex-col gap-1">
+    <label className="text-[10px] font-bold text-foreground/60 uppercase tracking-wider">
+      {label}
+    </label>
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      disabled={disabled}
+      className="w-full px-3 py-2.5 bg-background border border-border-custom rounded-xl text-sm font-medium text-foreground placeholder:text-foreground/30 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:opacity-50"
+    />
+  </div>
+);
+
+const PasswordField = ({
+  label,
+  value,
+  show,
+  onToggle,
+  onChange,
+}: any) => (
+  <div className="flex flex-col gap-1">
+    <label className="text-[10px] font-bold text-foreground/60 uppercase tracking-wider">
+      {label}
+    </label>
+    <div className="relative">
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+        placeholder="••••••••"
+        className="w-full px-3 py-2.5 pr-10 bg-background border border-border-custom rounded-xl text-sm font-medium text-foreground placeholder:text-foreground/30 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors"
+      >
+        {show ? <EyeOff size={15} /> : <Eye size={15} />}
+      </button>
+    </div>
+  </div>
+);
