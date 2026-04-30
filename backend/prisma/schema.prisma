@@ -110,6 +110,7 @@ model Vehicle {
   sitting_capacity  Int
   standing_capacity Int
   speed_limit       Int
+  vehicle_type      String?       @map("vehicle_type")
   status            VehicleStatus @default(ACTIVE)
 
   operator Operator @relation(fields: [operator_id], references: [operator_id])

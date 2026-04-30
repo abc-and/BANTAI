@@ -1,8 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format, startOfDay, startOfWeek, startOfMonth, isWithinInterval } from "date-fns";
 import { useTheme } from "@/context/ThemeContext";
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { AlertTriangle, ShieldCheck, RefreshCw, CheckCircle, X } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +24,7 @@ export enum ViolationStatus {
     verified = "verified",
     dismissed = "dismissed",
     resolved = "resolved",
+    confirmed = "confirmed",
 }
 
 export interface Violation {
@@ -37,6 +46,7 @@ export interface Violation {
         speed?: number;
         limit?: number;
     };
+    imageUrl?: string;
 }
 
 interface ViolationsManagementProps {
@@ -91,6 +101,27 @@ const SAMPLE_VIOLATIONS: Violation[] = [
     },
 ];
 
+// ─── Helper function to upload image ─────────────────────────────────────────
+
+async function uploadViolationImage(violationId: string, violationType: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('violationId', violationId)
+    formData.append('violationType', violationType)
+
+    const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+    })
+
+    if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Upload failed')
+    }
+
+    return response.json()
+}
+
 // ─── Time Filter Type ────────────────────────────────────────────────────────
 
 type TimeFilter = "All" | "Today" | "This Week" | "This Month";
@@ -102,12 +133,12 @@ export default function ViolationsManagement({
     onUpdate,
 }: Partial<ViolationsManagementProps>) {
     const { theme } = useTheme();
+    const { user } = useAuth();
     const isDark = theme === "dark";
     const t = (dark: string, light: string) => (isDark ? dark : light);
 
-    const [violations, setViolations] = useState<Violation[]>(
-        externalViolations ?? SAMPLE_VIOLATIONS
-    );
+    const [violations, setViolations] = useState<Violation[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState<ViolationType | "All">("All");
     const [timeFilter, setTimeFilter] = useState<TimeFilter>("All");
@@ -115,6 +146,84 @@ export default function ViolationsManagement({
     const [snapshotViolation, setSnapshotViolation] = useState<Violation | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [resolveConfirm, setResolveConfirm] = useState<Violation | null>(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+    const loadViolations = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const response = await fetch("/api/violations");
+            if (!response.ok) throw new Error("Failed to fetch violations");
+            const data = await response.json();
+            
+            const transformStatus = (s: string) => {
+                const status = s?.toLowerCase();
+                if (status === "confirmed") return ViolationStatus.confirmed;
+                if (status === "verified") return ViolationStatus.verified;
+                if (status === "resolved") return ViolationStatus.confirmed; // Treat resolved as confirmed
+                if (status === "dismissed") return ViolationStatus.dismissed;
+                return ViolationStatus.detected;
+            };
+
+            const all = [
+                ...(data.overcapacity || []).map((v: any) => ({
+                    id: v.id,
+                    type: ViolationType.overload,
+                    status: transformStatus(v.status),
+                    unitId: v.vehicle_code || v.plate_number || v.vehicle_id,
+                    operator: v.operator_name || "Unknown Operator",
+                    route: v.route_name || "Unknown Route",
+                    location: v.location || "Mandaue City",
+                    lat: v.coordinates?.[0] || 10.3235,
+                    lng: v.coordinates?.[1] || 123.9222,
+                    timestamp: new Date(v.timestamp),
+                    repeatOffenseCount: 0,
+                    details: { 
+                        passengers: v.passengerCount, 
+                        capacity: v.totalCapacity 
+                    },
+                    imageUrl: v.imageUrl
+                })),
+                ...(data.overspeeding || []).map((v: any) => ({
+                    id: v.id,
+                    type: ViolationType.overspeed,
+                    status: transformStatus(v.status),
+                    unitId: v.vehicle_code || v.plate_number || v.vehicle_id,
+                    operator: v.operator_name || "Unknown Operator",
+                    route: v.route_name || "Unknown Route",
+                    location: v.location || "Mandaue City",
+                    lat: v.coordinates?.[0] || 10.3235,
+                    lng: v.coordinates?.[1] || 123.9222,
+                    timestamp: new Date(v.timestamp),
+                    repeatOffenseCount: 0,
+                    details: { 
+                        speed: v.speed, 
+                        limit: v.speedLimit 
+                    },
+                    imageUrl: v.imageUrl
+                }))
+            ];
+            
+            let filtered = all.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+            // Filter by operator if not super admin
+            const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
+            if (user && !isSuperAdmin && user.operatorName) {
+                filtered = filtered.filter(v => v.operator === user.operatorName);
+            }
+
+            setViolations(filtered);
+        } catch (error) {
+            console.error("Error loading violations:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadViolations();
+        const interval = setInterval(loadViolations, 15000);
+        return () => clearInterval(interval);
+    }, [loadViolations]);
 
     // Helper to filter by time range
     const isWithinTimeRange = (timestamp: Date, filter: TimeFilter): boolean => {
@@ -131,12 +240,12 @@ export default function ViolationsManagement({
         }
     };
 
-    // Only show verified violations (not detected/resolved/dismissed)
+    // Updated filter to show both verified and detected for management
     const filteredViolations = violations.filter((v) => {
         if (
-            v.status === ViolationStatus.detected ||
             v.status === ViolationStatus.resolved ||
-            v.status === ViolationStatus.dismissed
+            v.status === ViolationStatus.dismissed ||
+            v.status === ViolationStatus.confirmed
         )
             return false;
         if (searchQuery) {
@@ -177,18 +286,38 @@ export default function ViolationsManagement({
         });
     };
 
-    const markAsResolved = (v: Violation) => {
-        setViolations((prev) =>
-            prev.map((vio) =>
-                vio.id === v.id
-                    ? { ...vio, status: ViolationStatus.resolved, resolvedDate: new Date() }
-                    : vio
-            )
-        );
-        setSelectedViolation(null);
-        setSnapshotViolation(null);
-        setResolveConfirm(null);
-        onUpdate?.();
+    const markAsResolved = async (v: Violation) => {
+        try {
+            const response = await fetch(`/api/vehicles/${v.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    status: "CONFIRMED",
+                    type: v.type === ViolationType.overspeed ? "overspeeding" : "overcapacity"
+                }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Failed to resolve violation");
+
+            setViolations((prev) =>
+                prev.map((vio) =>
+                    vio.id === v.id
+                        ? { ...vio, status: ViolationStatus.confirmed, resolvedDate: new Date() }
+                        : vio
+                )
+            );
+            setSelectedViolation(null);
+            setSnapshotViolation(null);
+            setResolveConfirm(null);
+            setShowSuccessModal(true);
+            setTimeout(() => setShowSuccessModal(false), 4000);
+            loadViolations(); // Refresh from DB
+            onUpdate?.();
+        } catch (error: any) {
+            console.error("Resolve error:", error);
+            alert(`Failed to resolve violation: ${error.message}`);
+        }
     };
 
     const generateReport = (v: Violation) => {
@@ -296,7 +425,7 @@ export default function ViolationsManagement({
             {/* Main panel */}
             <div className="flex flex-col flex-1 min-w-0">
 
-                {/* ✅ NEW HEADER (CENTERED, NO BLUE) */}
+                {/* HEADER (CENTERED) */}
                 <div className={`px-4 border-b ${t("bg-[#0f172a] border-slate-800", "bg-white border-slate-200")}`}>
                     <div className="max-w-[1600px] mx-auto py-6 flex flex-col items-center justify-center text-center">
                         <h1 className={`text-xl font-black tracking-tight uppercase ${t("text-white", "text-slate-800")}`}>
@@ -308,14 +437,14 @@ export default function ViolationsManagement({
                     </div>
                 </div>
 
-                {/* Stats bar (UNCHANGED) */}
+                {/* Stats bar */}
                 <div className={`border-b px-4 py-3 grid grid-cols-3 gap-3 transition-colors duration-300 ${t("bg-[#1e293b] border-slate-700", "bg-slate-100 border-slate-200")}`}>
                     <StatChip isDark={isDark} label="Total Verified" count={totalVerified} color="blue" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />} />
                     <StatChip isDark={isDark} label="Overcapacity" count={totalOverload} color="red" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />} />
                     <StatChip isDark={isDark} label="Overspeeding" count={totalOverspeed} color="orange" icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />} />
                 </div>
 
-                {/* ✅ UPDATED CONTROL BAR with Time Filter */}
+                {/* CONTROL BAR */}
                 <div className={`border-b px-4 py-3 flex items-center gap-3 transition-colors duration-300 ${t("bg-[#1e293b]/50 border-slate-700", "bg-white border-slate-200")}`}>
 
                     {/* LEFT */}
@@ -343,7 +472,6 @@ export default function ViolationsManagement({
                             <option value={ViolationType.overspeed}>Overspeeding Only</option>
                         </select>
 
-                        {/* NEW TIME FILTER DROPDOWN */}
                         <select
                             value={timeFilter}
                             onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
@@ -356,7 +484,7 @@ export default function ViolationsManagement({
                         </select>
                     </div>
 
-                    {/* RIGHT (MOVED HERE) */}
+                    {/* RIGHT */}
                     <div className="flex items-center gap-4 ml-auto">
                         <div className="flex flex-col items-end">
                             <span className="text-slate-400 text-[8px] font-black uppercase tracking-widest">
@@ -402,7 +530,12 @@ export default function ViolationsManagement({
 
                         {/* Table body */}
                         <div className="flex-1 overflow-y-auto">
-                            {filteredViolations.length === 0 ? (
+                            {isLoading && violations.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
+                                    <RefreshCw className="w-12 h-12 animate-spin opacity-30" />
+                                    <p className="text-xs font-bold uppercase tracking-widest">Fetching violations...</p>
+                                </div>
+                            ) : filteredViolations.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
                                     <svg className="w-16 h-16 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -457,7 +590,7 @@ export default function ViolationsManagement({
                                                 <svg className="w-2.5 h-2.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                 </svg>
-                                                {v.location.split(",")[0]}
+                                                {typeof v.location === 'string' ? v.location.split(",")[0] : "Unknown Location"}
                                             </div>
                                             <div className={`flex items-center justify-center text-[10px] font-bold ${t("text-slate-500", "text-slate-500")}`}>{format(v.timestamp, "MM/dd HH:mm")}</div>
                                             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -529,11 +662,37 @@ export default function ViolationsManagement({
                     </div>
                 </div>
             )}
+            {/* SUCCESS NOTIFICATION TILE */}
+            {showSuccessModal && (
+                <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[3000] animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border-2 backdrop-blur-xl ${
+                        t("bg-emerald-500/20 border-emerald-500/50 text-emerald-400", "bg-white border-emerald-200 text-emerald-800")
+                    }`}>
+                        <div className="p-2 rounded-xl bg-emerald-500">
+                            <CheckCircle size={20} className="text-white" strokeWidth={3} />
+                        </div>
+                        <div className="flex flex-col">
+                            <p className="text-[11px] font-black uppercase tracking-wider">
+                                Violation Resolved
+                            </p>
+                            <p className="text-[9px] font-bold opacity-70 uppercase tracking-widest">
+                                The infraction has been confirmed and archived
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => setShowSuccessModal(false)}
+                            className="ml-4 p-1 hover:bg-black/10 rounded-full transition-colors"
+                        >
+                            <X size={14} strokeWidth={3} />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-// ─── Snapshot Sidebar Panel ───────────────────────────────────────────────────
+// ─── Snapshot Sidebar Panel with Image Upload ─────────────────────────────────
 
 function SnapshotPanel({
     violation: v,
@@ -548,9 +707,46 @@ function SnapshotPanel({
 }) {
     const t = (dark: string, light: string) => (isDark ? dark : light);
     const isOverload = v.type === ViolationType.overload;
+    const [uploading, setUploading] = useState(false);
+    const [imagePreview, setImagePreview] = useState<string | null>(v.imageUrl || null);
+
+    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            alert('Please upload an image file');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Image must be less than 5MB');
+            return;
+        }
+
+        setUploading(true);
+
+        try {
+            const violationType = isOverload ? 'overcapacity' : 'overspeeding';
+            const data = await uploadViolationImage(v.id, violationType, file);
+
+            if (data.success) {
+                setImagePreview(data.imageUrl);
+                v.imageUrl = data.imageUrl;
+                alert('Image uploaded successfully!');
+            } else {
+                alert('Upload failed: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Failed to upload image');
+        } finally {
+            setUploading(false);
+        }
+    };
 
     return (
-        <div className={`w-[360px] shrink-0 border-l flex flex-col shadow-2xl transition-all duration-300 animate-in slide-in-from-right ${t("bg-slate-900 border-slate-800", "bg-white border-slate-200")}`}>
+        <div className={`w-[380px] shrink-0 border-l flex flex-col shadow-2xl transition-all duration-300 animate-in slide-in-from-right ${t("bg-slate-900 border-slate-800", "bg-white border-slate-200")}`}>
             <div className={`px-6 py-6 flex items-center justify-between border-b ${t("border-slate-800", "border-slate-100")}`}>
                 <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl ${isOverload ? t("bg-rose-500/20 text-rose-500", "bg-red-50 text-red-600") : t("bg-amber-500/20 text-amber-500", "bg-orange-50 text-orange-600")}`}>
@@ -572,7 +768,7 @@ function SnapshotPanel({
                     <div className={`p-4 rounded-2xl space-y-2 ${t("bg-slate-800/40", "bg-slate-50")}`}>
                         <MetricRow isDark={isDark} label="Unit ID" value={v.unitId} bold />
                         <MetricRow isDark={isDark} label="Time" value={format(v.timestamp, "hh:mm a")} />
-                        <MetricRow isDark={isDark} label="Location" value={v.location.split(',')[0]} />
+                        <MetricRow isDark={isDark} label="Location" value={typeof v.location === 'string' ? v.location.split(',')[0] : "Unknown"} />
                         <MetricRow isDark={isDark} label="Operator" value={v.operator} />
                     </div>
                 </div>
@@ -594,6 +790,39 @@ function SnapshotPanel({
                     </div>
                 </div>
 
+                {/* Evidence Image Section */}
+                {isOverload && (
+                    <div className="space-y-3">
+                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Evidence Image</h4>
+                        <div className={`p-4 rounded-2xl space-y-3 ${t("bg-slate-800/40", "bg-slate-50")}`}>
+                            {imagePreview && (
+                                <img
+                                    src={imagePreview}
+                                    alt="Violation evidence"
+                                    className="w-full rounded-lg object-cover max-h-48"
+                                    onError={(e) => {
+                                        e.currentTarget.src = '/placeholder-image.png';
+                                    }}
+                                />
+                            )}
+                            <div className="flex items-center gap-3">
+                                <label className={`cursor-pointer px-4 py-2 rounded-lg text-xs font-bold transition-all ${uploading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}>
+                                    {uploading ? 'Uploading...' : '📷 Upload Evidence'}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageUpload}
+                                        disabled={uploading}
+                                        className="hidden"
+                                    />
+                                </label>
+                                {uploading && <div className="text-xs text-slate-400">Uploading...</div>}
+                            </div>
+                            <p className="text-[9px] text-slate-400">Supported: JPG, PNG, GIF, WebP (Max 5MB)</p>
+                        </div>
+                    </div>
+                )}
+
                 <button
                     onClick={() => onUpdate(v)}
                     className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3 uppercase text-[10px] tracking-widest"
@@ -606,7 +835,7 @@ function SnapshotPanel({
     );
 }
 
-// ─── Details Modal Panel ──────────────────────────────────────────────────────
+// ─── Details Modal Panel with Image Upload ───────────────────────────────────
 
 function DetailsPanel({
     violation: v,
@@ -623,6 +852,8 @@ function DetailsPanel({
 }) {
     const t = (dark: string, light: string) => (isDark ? dark : light);
     const isOverload = v.type === ViolationType.overload;
+    const [uploading, setUploading] = useState(false);
+    const [imagePreview, setImagePreview] = useState<string | null>(v.imageUrl || null);
 
     const headerText = isOverload ? t("text-rose-400", "text-red-500") : t("text-amber-500", "text-orange-500 font-bold");
     const headerIconBg = isOverload ? t("bg-rose-500/20", "bg-red-50") : t("bg-amber-500/20", "bg-orange-50");
@@ -630,6 +861,41 @@ function DetailsPanel({
     const excess = isOverload
         ? (v.details.passengers ?? 0) - (v.details.capacity ?? 0)
         : (v.details.speed ?? 0) - (v.details.limit ?? 0);
+
+    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            alert('Please upload an image file');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Image must be less than 5MB');
+            return;
+        }
+
+        setUploading(true);
+
+        try {
+            const violationType = isOverload ? 'overcapacity' : 'overspeeding';
+            const data = await uploadViolationImage(v.id, violationType, file);
+
+            if (data.success) {
+                setImagePreview(data.imageUrl);
+                v.imageUrl = data.imageUrl;
+                alert('Image uploaded successfully!');
+            } else {
+                alert('Upload failed: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Failed to upload image');
+        } finally {
+            setUploading(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 p-4">
@@ -655,7 +921,7 @@ function DetailsPanel({
                 </div>
 
                 {/* Content */}
-                <div className="p-8 space-y-6">
+                <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
 
                     {/* Metrics Grid */}
                     <div className="grid grid-cols-2 gap-4">
@@ -684,7 +950,42 @@ function DetailsPanel({
                         </div>
                     </div>
 
-                    {/* Additional Sub-details */}
+                    {/* Evidence Image Section */}
+                    {isOverload && (
+                        <div className={`p-5 rounded-2xl border ${t("bg-slate-800/40 border-slate-700/50", "bg-slate-50 border-slate-100")}`}>
+                            <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.1em] mb-3">Evidence Image</p>
+
+                            {imagePreview && (
+                                <div className="mb-3">
+                                    <img
+                                        src={imagePreview}
+                                        alt="Violation evidence"
+                                        className="w-full rounded-lg object-cover max-h-48"
+                                        onError={(e) => {
+                                            e.currentTarget.src = '/placeholder-image.png';
+                                        }}
+                                    />
+                                </div>
+                            )}
+
+                            <div className="flex items-center gap-3">
+                                <label className={`cursor-pointer px-4 py-2 rounded-lg text-xs font-bold transition-all ${uploading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}>
+                                    {uploading ? 'Uploading...' : '📷 Upload Evidence'}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageUpload}
+                                        disabled={uploading}
+                                        className="hidden"
+                                    />
+                                </label>
+                                {uploading && <div className="text-xs text-slate-400">Uploading...</div>}
+                            </div>
+                            <p className="text-[9px] text-slate-400 mt-2">Supported: JPG, PNG, GIF, WebP (Max 5MB)</p>
+                        </div>
+                    )}
+
+                    {/* Status Badge */}
                     <div className="flex items-center justify-between px-2 pt-2">
                         <div className="flex items-center gap-2">
                             <div className="w-2.5 h-2.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse"></div>
@@ -693,7 +994,7 @@ function DetailsPanel({
                         <p className="text-xs font-bold text-slate-400 tracking-tighter">ID: {v.id}</p>
                     </div>
 
-                    {/* Action buttons matching image style */}
+                    {/* Action buttons */}
                     <div className="flex gap-4 pt-6">
                         <button
                             onClick={() => onMarkResolved(v)}

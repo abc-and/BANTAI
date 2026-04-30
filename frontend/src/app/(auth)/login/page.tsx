@@ -30,7 +30,15 @@ export default function AdminLoginPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Login failed');
 
-      authLogin(data.token, data.user);
+      const mappedUser = {
+        ...data.user,
+        firstName: data.user.first_name || data.user.firstName || data.user.employee_name?.split(' ')[0] || '',
+        lastName: data.user.last_name || data.user.lastName || data.user.employee_name?.split(' ').slice(1).join(' ') || '',
+        operatorId: data.user.operator_id || data.user.operatorId,
+        operatorName: data.user.operator_name || data.user.operatorName,
+      };
+
+      authLogin(data.token, mappedUser);
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred.');
       setIsLoading(false);

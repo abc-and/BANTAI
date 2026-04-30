@@ -1,4 +1,4 @@
-export type Role = "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "OFFICER" | "USER";
+export type Role = "SUPER_ADMIN" | "SUPERADMIN" | "ADMIN" | "MANAGER" | "OFFICER" | "USER";
 
 export interface User {
     id: string;
@@ -7,6 +7,8 @@ export interface User {
     lastName: string;
     role: Role;
     isActive: boolean;
+    operatorId?: string;
+    operatorName?: string;
     createdAt: string;
 }
 
