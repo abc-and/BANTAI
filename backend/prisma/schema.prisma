@@ -46,15 +46,44 @@ enum VehicleStatus {
   INACTIVE
 }
 
+enum UserRole {
+  ADMIN
+  USER
+  // Expand these based on your public.UserRole types
+}
+
+enum ViolationStatus {
+  PENDING
+  APPROVED
+  DISMISSED
+  // Expand these based on your public.ViolationStatus types
+}
+
 //////////////////////////////////////////////////////
 // MODELS
 //////////////////////////////////////////////////////
 
+model bantai_users {
+  id         String   @id @default(uuid()) @db.Uuid
+  username   String   @unique
+  email      String?  @unique
+  first_name String
+  last_name  String
+  password   String
+  role       UserRole
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now()) @db.Timestamp()
+  updated_at DateTime @updatedAt @db.Timestamp()
+
+  @@map("bantai_users")
+}
+
 model Operator {
-  operator_id    String @id @default(uuid())
+  operator_id    String  @id @default(uuid()) @db.Uuid
   operator_name  String
-  email          String @unique
+  email          String  @unique
   contact_number String
+  route_id       String? @default(uuid()) @db.Uuid
 
   drivers  Driver[]
   vehicles Vehicle[]
@@ -64,9 +93,9 @@ model Operator {
 }
 
 model Driver {
-  driver_id   String @id @default(uuid())
+  driver_id   String @id @default(uuid()) @db.Uuid
   driver_name String
-  operator_id String
+  operator_id String @db.Uuid
 
   operator Operator  @relation(fields: [operator_id], references: [operator_id])
   vehicles Vehicle[]
@@ -75,14 +104,15 @@ model Driver {
 }
 
 model Operator_User {
-  user_id        String @id @default(uuid())
-  operator_id    String
-  username       String @unique
+  user_id        String    @id @default(uuid()) @db.Uuid
+  operator_id    String    @db.Uuid
+  username       String    @unique
   password_hash  String
   employee_name  String
-  email          String @unique
+  email          String    @unique
   contact_number String
   role           String
+  created_at     DateTime? @default(now()) @db.Timestamp()
 
   operator Operator @relation(fields: [operator_id], references: [operator_id])
 
@@ -90,10 +120,11 @@ model Operator_User {
 }
 
 model Route {
-  route_id           String @id @default(uuid())
-  route_name         String
-  terminal_latitude  Float
-  terminal_longitude Float
+  route_id               String  @id @default(uuid()) @db.Uuid
+  route_name             String
+  terminal_latitude      Float?  // Prisma will map this to double precision
+  terminal_longitude     Float?  // Prisma will map this to double precision
+  terminal_radius_meters Int?    @default(65)
 
   vehicles Vehicle[]
 
@@ -101,39 +132,43 @@ model Route {
 }
 
 model Vehicle {
-  vehicle_id        String        @id @default(uuid())
-  operator_id       String
-  driver_id         String
-  route_id          String
+  vehicle_id        String        @id @default(uuid()) @db.Uuid
+  operator_id       String        @db.Uuid
+  driver_id         String        @db.Uuid
+  route_id          String        @db.Uuid
   vehicle_code      String
   plate_number      String
   sitting_capacity  Int
   standing_capacity Int
   speed_limit       Int
-  vehicle_type      String?       @map("vehicle_type")
+  vehicle_type      String?
   status            VehicleStatus @default(ACTIVE)
 
   operator Operator @relation(fields: [operator_id], references: [operator_id])
   driver   Driver   @relation(fields: [driver_id], references: [driver_id])
   route    Route    @relation(fields: [route_id], references: [route_id])
 
-  trips          Trip[]
-  dispatchQueues Dispatch_Queue[]
-  statuses       Vehicle_Status[]
-  etaRequests    ETA_Request[]
+  trips                   Trip[]
+  dispatchQueues          Dispatch_Queue[]
+  statuses                Vehicle_Status[]
+  etaRequests             ETA_Request[]
+  incidents               Incident[]
+  overcapacity_violations Overcapacity_Violations[]
+  overspeeding_violations Overspeeding_Violations[]
 
   @@map("vehicle")
 }
 
 model Trip {
-  trip_id              String     @id @default(uuid())
-  vehicle_id           String
-  start_trip_timestamp DateTime
-  end_trip_timestamp   DateTime?
-  trip_status          TripStatus
-  dispatch_type        String
+  trip_id              String     @id @default(uuid()) @db.Uuid
+  vehicle_id           String?    @db.Uuid
+  trip_number          Int?       @db.SmallInt
+  start_trip_timestamp DateTime?  @default(now()) @db.Timestamptz()
+  end_trip_timestamp   DateTime?  @db.Timestamptz()
+  trip_status          String?    // Changed to String to match your check constraint, or use the TripStatus enum
+  dispatch_type        String?
 
-  vehicle Vehicle @relation(fields: [vehicle_id], references: [vehicle_id])
+  vehicle Vehicle? @relation(fields: [vehicle_id], references: [vehicle_id])
 
   incidents   Incident[]
   etaRequests ETA_Request[]
@@ -142,8 +177,8 @@ model Trip {
 }
 
 model Dispatch_Queue {
-  queue_id        String         @id @default(uuid())
-  vehicle_id      String
+  queue_id        String         @id @default(uuid()) @db.Uuid
+  vehicle_id      String         @db.Uuid
   position        Int
   status          DispatchStatus
   entry_timestamp DateTime
@@ -154,8 +189,8 @@ model Dispatch_Queue {
 }
 
 model Vehicle_Status {
-  status_id                String       @id @default(uuid())
-  vehicle_id               String
+  status_id                String       @id @default(uuid()) @db.Uuid
+  vehicle_id               String       @db.Uuid
   standing_passenger_count Int
   sitting_passenger_count  Int
   vehicle_latitude         Float
@@ -169,18 +204,22 @@ model Vehicle_Status {
 }
 
 //////////////////////////////////////////////////////
-// INCIDENT SYSTEM (NORMALIZED)
+// INCIDENT SYSTEM
 //////////////////////////////////////////////////////
 
 model Incident {
-  incident_id          String             @id @default(uuid())
-  trip_id              String
-  incident_type        IncidentType
+  incident_id          String             @id @default(uuid()) @db.Uuid
+  vehicle_id           String?            @default(uuid()) @db.Uuid
+  trip_id              String?            @db.Uuid
+  incident_type        IncidentType[]     // PostgreSQL arrays are supported
   incident_status      IncidentStatus     @default(PENDING)
   incident_trip_status IncidentTripStatus @default(ACTIVE)
-  timestamp            DateTime           @default(now())
+  timestamp            DateTime?          @default(now()) @db.Timestamptz()
+  detected_at          DateTime?          @db.Timestamp()
+  isActive             Boolean?
 
-  trip Trip @relation(fields: [trip_id], references: [trip_id])
+  trip    Trip?    @relation(fields: [trip_id], references: [trip_id])
+  vehicle Vehicle? @relation(fields: [vehicle_id], references: [vehicle_id])
 
   overcapacityDetails Overcapacity_Violations?
   overspeedingDetails Overspeeding_Violations?
@@ -189,27 +228,41 @@ model Incident {
 }
 
 model Overcapacity_Violations {
-  id                 String @id @default(uuid())
-  incident_id        String @unique
-  threshold_sitting  Int
-  threshold_standing Int
-  measured_sitting   Int
-  measured_standing  Int
-  incident_snapshot  Json?
+  overcapacity_id    String          @id @default(uuid()) @db.Uuid
+  incident_id        String?         @unique @default(uuid()) @db.Uuid
+  vehicle_id         String          @default(uuid()) @db.Uuid
+  status             ViolationStatus @default(PENDING)
+  remarks            String?
+  detected_at        DateTime        @default(now()) @db.Timestamp()
+  created_at         DateTime        @default(now()) @db.Timestamp()
+  updated_at         DateTime        @default(now()) @updatedAt @db.Timestamp()
+  image_url_front  String?
+  image_url_rear   String?
+  recorded_standing  BigInt?
+  recorded_sitting   BigInt?
+  breach_types       String[]        @default([])
 
-  incident Incident @relation(fields: [incident_id], references: [incident_id])
+  incident Incident? @relation(fields: [incident_id], references: [incident_id])
+  vehicle  Vehicle   @relation(fields: [vehicle_id], references: [vehicle_id])
 
+  @@index([image_url_front, image_url_rear])
   @@map("overcapacity_violations")
 }
 
 model Overspeeding_Violations {
-  id           String @id @default(uuid())
-  incident_id  String @unique
-  speed        Float
-  speed_limit  Float
-  speed_excess Float
+  overspeeding_id String          @id @default(uuid()) @db.Uuid
+  incident_id     String?         @unique @default(uuid()) @db.Uuid
+  vehicle_id      String          @default(uuid()) @db.Uuid
+  status          ViolationStatus @default(PENDING)
+  remarks         String?
+  detected_at     DateTime        @default(now()) @db.Timestamp()
+  created_at      DateTime        @default(now()) @db.Timestamp()
+  updated_at      DateTime        @default(now()) @updatedAt @db.Timestamp()
+  location        Json?
+  speed_detected  Float?          @db.Real
 
-  incident Incident @relation(fields: [incident_id], references: [incident_id])
+  incident Incident? @relation(fields: [incident_id], references: [incident_id])
+  vehicle  Vehicle   @relation(fields: [vehicle_id], references: [vehicle_id])
 
   @@map("overspeeding_violations")
 }
@@ -219,10 +272,10 @@ model Overspeeding_Violations {
 //////////////////////////////////////////////////////
 
 model ETA_Request {
-  request_id                 String   @id @default(uuid())
-  commuter_id                String
-  vehicle_id                 String
-  trip_id                    String
+  request_id                 String   @id @default(uuid()) @db.Uuid
+  commuter_id                String   @db.Uuid
+  vehicle_id                 String   @db.Uuid
+  trip_id                    String   @db.Uuid
   request_location_latitude  Float
   request_location_longitude Float
   ETA                        Float
@@ -237,7 +290,7 @@ model ETA_Request {
 }
 
 model Commuter {
-  commuter_id String @id @default(uuid())
+  commuter_id String @id @default(uuid()) @db.Uuid
 
   etaRequests ETA_Request[]
 

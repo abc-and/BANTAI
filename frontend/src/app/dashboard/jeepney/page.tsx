@@ -1,3 +1,4 @@
+// src/app/dashboard/jeepney/page.tsx
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
@@ -45,7 +46,6 @@ export default function ModernJeepneyRegistration() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Form state
   const [vehicleId, setVehicleId] = useState("");
   const [driverName, setDriverName] = useState("");
   const [plateNumber, setPlateNumber] = useState("");
@@ -58,54 +58,82 @@ export default function ModernJeepneyRegistration() {
   const [speedLimit, setSpeedLimit] = useState("");
 
   const normalizeVehicle = (raw: any): ModernJeepney => ({
-    vehicleId: raw.vehicleId,
-    driverName: raw.driverName,
-    plateNumber: raw.plateNumber,
-    vehicleType: raw.vehicleType,
-    vehicleModel: raw.vehicleModel,
-    operator: raw.operator,
-    route: raw.routeName ?? raw.route ?? "",
-    sittingCapacity: raw.sittingCapacity,
-    standingCapacity: raw.standingCapacity,
-    speedLimit: raw.speedLimit,
-    registrationDate: raw.registrationDate,
-    status: raw.status === "ACTIVE" ? "Active" : raw.status === "INACTIVE" ? "Inactive" : raw.status,
-    violationCount: raw.violationCount ?? 0,
+    vehicleId: raw.vehicleId || raw.vehicle_id || raw.vehicle_code || "",
+    driverName: raw.driverName || raw.driver?.driver_name || "No Driver Assigned",
+    plateNumber: raw.plateNumber || raw.plate_number || "No Plate",
+    vehicleType: raw.vehicleType || raw.vehicle_type || "Not Specified",
+    vehicleModel: raw.vehicleModel || "Hino",
+    operator: raw.operator?.operator_name || raw.operator_name || raw.operator || "Unknown Operator",
+    route: raw.routeName ?? raw.route ?? raw.route_name ?? "No Route",
+    sittingCapacity: raw.sittingCapacity || raw.sitting_capacity || 0,
+    standingCapacity: raw.standingCapacity || raw.standing_capacity || 0,
+    speedLimit: raw.speedLimit || raw.speed_limit || 50,
+    registrationDate: raw.registrationDate || raw.created_at || new Date().toISOString(),
+    status: raw.status === "ACTIVE" ? "Active" : raw.status === "INACTIVE" ? "Inactive" : (raw.status || "Active"),
+    violationCount: raw.violationCount ?? raw.violation_count ?? 0,
   });
+
+  const getAuthToken = () => {
+    let token = localStorage.getItem("token");
+    if (token && token.includes('-superadmin')) {
+      token = token.replace('-superadmin', '');
+      localStorage.setItem('token', token);
+    }
+    return token;
+  };
 
   const loadVehicles = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/vehicles?t=${Date.now()}`);
+      const token = getAuthToken();
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      
+      const response = await fetch(`/api/vehicles?t=${Date.now()}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData?.error || "Failed to load vehicles");
       }
       const rawVehicles = await response.json();
-      // Deduplicate by vehicleId to prevent React key conflicts
-      const seen = new Set<string>();
-      const unique = rawVehicles.filter((v: any) => {
-        if (seen.has(v.vehicleId)) return false;
-        seen.add(v.vehicleId);
-        return true;
-      });
-      let filtered: ModernJeepney[] = unique.map(normalizeVehicle);
       
-      // Filter by operator if not super admin
+      let filtered: ModernJeepney[] = rawVehicles.map(normalizeVehicle);
+
       const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
-      if (user && !isSuperAdmin && user.operatorName) {
-        filtered = filtered.filter(v => v.operator === user.operatorName);
-      }
       
+      if (user && !isSuperAdmin && user.operatorName) {
+        const userOperatorNormalized = user.operatorName.toLowerCase().trim();
+        filtered = filtered.filter(v => {
+          const operatorName = v.operator || "Unknown Operator";
+          return operatorName.toLowerCase().trim() === userOperatorNormalized;
+        });
+      }
+
       setRegisteredVehicles(filtered);
+      setLastRefresh(new Date());
     } catch (error) {
       console.error("Load error:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const loadOperators = async () => {
     try {
-      const response = await fetch("/api/operators");
+      const token = getAuthToken();
+      const response = await fetch("/api/operators", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       if (!response.ok) throw new Error("Failed to load operators");
       const data = await response.json();
       setOperatorOptions(data.map((op: any) => ({ id: op.operator_id, name: op.operator_name })));
@@ -116,7 +144,12 @@ export default function ModernJeepneyRegistration() {
 
   const loadRoutes = async () => {
     try {
-      const res = await fetch("/api/routes");
+      const token = getAuthToken();
+      const res = await fetch("/api/routes", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       if (!res.ok) throw new Error("Failed to load routes");
       const data = await res.json();
       setAvailableRoutes(data.map((r: any) => ({ id: r.route_id, name: r.route_name })));
@@ -127,11 +160,11 @@ export default function ModernJeepneyRegistration() {
 
   useEffect(() => {
     loadVehicles();
-    const interval = setInterval(loadVehicles, 10000); // Refresh every 10s
+    const interval = setInterval(loadVehicles, 10000);
     loadOperators();
     loadRoutes();
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   const getNextVehicleId = (vehicles: ModernJeepney[]) => {
     const numbers = vehicles.map((v) => parseInt(v.vehicleId.replace(/^MPUJ-0*/, ""), 10) || 0);
@@ -197,11 +230,15 @@ export default function ModernJeepneyRegistration() {
     };
 
     try {
+      const token = getAuthToken();
       const response = await fetch(
         editingVehicle ? `/api/vehicles/${editingVehicle.vehicleId}` : "/api/vehicles",
         {
           method: editingVehicle ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            'Authorization': `Bearer ${token}`,
+          },
           body: JSON.stringify(payload),
         }
       );
@@ -224,15 +261,19 @@ export default function ModernJeepneyRegistration() {
     }
   };
 
-  const toggleStatus = async (id: string) => {
-    const vehicle = registeredVehicles.find((v) => v.vehicleId === id);
+  const toggleStatus = async (id: string, operatorName: string) => {
+    const vehicle = registeredVehicles.find((v) => v.vehicleId === id && v.operator === operatorName);
     if (!vehicle) return;
     const newStatus = vehicle.status === "Active" ? "INACTIVE" : "ACTIVE";
     try {
+      const token = getAuthToken();
       const response = await fetch(`/api/vehicles/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        headers: { 
+          "Content-Type": "application/json",
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus, vehicleId: id, operatorName: operatorName }),
       });
       if (!response.ok) throw new Error("Failed to update status");
       await loadVehicles();
@@ -248,7 +289,8 @@ export default function ModernJeepneyRegistration() {
       v.vehicleId.toLowerCase().includes(query) ||
       v.driverName.toLowerCase().includes(query) ||
       v.plateNumber.toLowerCase().includes(query) ||
-      v.route.toLowerCase().includes(query);
+      v.route.toLowerCase().includes(query) ||
+      v.operator.toLowerCase().includes(query);
     const filterMatch =
       selectedFilter === "All" ||
       (selectedFilter === "Active" && v.status === "Active") ||
@@ -260,7 +302,6 @@ export default function ModernJeepneyRegistration() {
     <div className={`flex h-full transition-colors duration-300 ${t("bg-[#0f172a]", "bg-slate-50")}`}>
       <div className="flex flex-col flex-1 min-w-0">
 
-        {/* HEADER */}
         <div className={`px-4 border-b ${t("bg-[#0f172a] border-slate-800", "bg-white border-slate-200")}`}>
           <div className="max-w-[1600px] mx-auto py-6 flex flex-col items-center justify-center text-center">
             <h1 className={`text-xl font-black tracking-tight uppercase ${t("text-white", "text-slate-800")}`}>
@@ -272,7 +313,6 @@ export default function ModernJeepneyRegistration() {
           </div>
         </div>
 
-        {/* CONTROL BAR */}
         <div className={`border-b px-4 py-3 flex items-center gap-3 transition-colors duration-300 ${t("bg-[#1e293b]/50 border-slate-700", "bg-white border-slate-200")}`}>
           <div className="relative flex-1 max-w-xs">
             <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${t("text-slate-500", "text-slate-400")}`} />
@@ -304,47 +344,100 @@ export default function ModernJeepneyRegistration() {
           </div>
         </div>
 
-        {/* TABLE */}
         <div className="flex-1 overflow-hidden p-4">
           <div className={`h-full rounded-2xl border flex flex-col overflow-hidden transition-all duration-300 ${t("bg-[#1e293b] border-slate-700 shadow-xl", "bg-white border-slate-200 shadow-sm")}`}>
-            <div className={`grid grid-cols-[60px_1fr_120px_140px_100px_1fr_100px_90px] px-3 py-3 border-b-2 text-[10px] font-extrabold tracking-widest uppercase transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700 text-slate-400", "bg-blue-50 border-blue-200 text-slate-600")}`}>
+
+            <div className={`grid grid-cols-[52px_110px_110px_140px_90px_1fr_70px_80px_90px_130px_72px] px-3 py-3 border-b-2 text-[10px] font-extrabold tracking-widest uppercase transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700 text-slate-400", "bg-blue-50 border-blue-200 text-slate-600")}`}>
               <div className="text-center">Status</div>
               <div>Vehicle ID</div>
               <div className="text-center">Plate</div>
               <div>Driver</div>
               <div className="text-center">Type</div>
               <div>Route</div>
-              <div className="text-center">Cap.</div>
+              <div className="text-center">Sitting</div>
+              <div className="text-center">Standing</div>
+              <div className="text-center">Speed</div>
+              <div>Operator</div>
               <div className="text-center">Edit</div>
             </div>
+
             <div className="flex-1 overflow-y-auto">
-              {filteredVehicles.length === 0 ? (
+              {isLoading && registeredVehicles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
+                  <RefreshCw className="w-12 h-12 animate-spin opacity-30" />
+                  <p className="text-xs font-bold uppercase tracking-widest">Loading vehicles...</p>
+                </div>
+              ) : filteredVehicles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
                   <Bus className="w-16 h-16 opacity-30" />
                   <p className={`font-bold ${t("text-slate-500", "text-slate-500")}`}>No vehicles found</p>
+                  {user && !(user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN") && (
+                    <p className="text-xs text-center mt-2">
+                      No vehicles found for {user.operatorName}.<br />
+                      Click "Register" to add a new vehicle.
+                    </p>
+                  )}
                 </div>
               ) : (
                 filteredVehicles.map((v, index) => (
                   <div
-                    key={`${v.vehicleId}-${index}`}
-                    className={`grid grid-cols-[60px_1fr_120px_140px_100px_1fr_100px_90px] px-3 py-3 border-b transition-all duration-200 ${t("border-slate-800 hover:bg-slate-800/40", "border-slate-100 hover:bg-slate-50")}`}
+                    key={`${v.vehicleId}-${v.operator}-${index}`}
+                    className={`grid grid-cols-[52px_110px_110px_140px_90px_1fr_70px_80px_90px_130px_72px] px-3 py-3 border-b transition-all duration-200 ${t("border-slate-800 hover:bg-slate-800/40", "border-slate-100 hover:bg-slate-50")}`}
                   >
                     <div className="flex justify-center items-center">
                       <button
-                        onClick={() => toggleStatus(v.vehicleId)}
-                        className={`w-3 h-3 rounded-full ${v.status === "Active" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-500"}`}
+                        onClick={() => toggleStatus(v.vehicleId, v.operator)}
+                        title={v.status}
+                        className={`w-3 h-3 rounded-full transition-all hover:scale-125 ${
+                          v.status === "Active"
+                            ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                            : "bg-slate-500"
+                        }`}
                       />
                     </div>
-                    <div className={`flex items-center text-[11px] font-mono font-bold ${t("text-slate-300", "text-slate-700")}`}>{v.vehicleId}</div>
-                    <div className="flex items-center justify-center">
-                      <span className={`px-2 py-1 text-[10px] font-black rounded border truncate max-w-[80px] ${t("bg-slate-800 text-white border-slate-700", "bg-white text-slate-800 border-slate-300 shadow-sm")}`}>{v.plateNumber}</span>
+
+                    <div className={`flex items-center text-[11px] font-mono font-bold ${t("text-slate-300", "text-slate-700")}`}>
+                      {v.vehicleId}
                     </div>
-                    <div className={`flex items-center text-[11px] font-semibold truncate pr-2 ${t("text-slate-300", "text-slate-700")}`}>{v.driverName}</div>
+
                     <div className="flex items-center justify-center">
-                      <span className={`px-2 py-1 text-[9px] font-black rounded uppercase ${t("bg-blue-900/30 text-blue-400 border border-blue-800/50", "bg-blue-50 text-blue-600 border border-blue-200")}`}>{v.vehicleType}</span>
+                      <span className={`px-2 py-1 text-[10px] font-black rounded border truncate max-w-[80px] ${t("bg-slate-800 text-white border-slate-700", "bg-white text-slate-800 border-slate-300 shadow-sm")}`}>
+                        {v.plateNumber}
+                      </span>
                     </div>
-                    <div className={`flex items-center text-[10px] truncate ${t("text-slate-400", "text-slate-600")}`}>{v.route}</div>
-                    <div className={`flex items-center justify-center text-[10px] font-bold ${t("text-slate-400", "text-slate-600")}`}>{v.sittingCapacity + v.standingCapacity}</div>
+
+                    <div className={`flex items-center text-[11px] font-semibold truncate pr-2 ${t("text-slate-300", "text-slate-700")}`}>
+                      {v.driverName}
+                    </div>
+
+                    <div className="flex items-center justify-center">
+                      <span className={`px-2 py-1 text-[9px] font-black rounded uppercase ${t("bg-blue-900/30 text-blue-400 border border-blue-800/50", "bg-blue-50 text-blue-600 border border-blue-200")}`}>
+                        {v.vehicleType}
+                      </span>
+                    </div>
+
+                    <div className={`flex items-center text-[10px] truncate pr-2 ${t("text-slate-400", "text-slate-600")}`}>
+                      {v.route}
+                    </div>
+
+                    <div className={`flex items-center justify-center text-[11px] font-bold ${t("text-slate-300", "text-slate-700")}`}>
+                      {v.sittingCapacity}
+                    </div>
+
+                    <div className={`flex items-center justify-center text-[11px] font-bold ${t("text-slate-300", "text-slate-700")}`}>
+                      {v.standingCapacity}
+                    </div>
+
+                    <div className="flex items-center justify-center">
+                      <span className={`px-2 py-1 text-[9px] font-black rounded uppercase ${t("bg-amber-900/20 text-amber-400 border border-amber-800/30", "bg-amber-50 text-amber-700 border border-amber-200")}`}>
+                        {v.speedLimit} km/h
+                      </span>
+                    </div>
+
+                    <div className={`flex items-center text-[10px] truncate pr-2 ${t("text-slate-400", "text-slate-500")}`}>
+                      {v.operator}
+                    </div>
+
                     <div className="flex justify-center items-center">
                       <button
                         onClick={() => startEdit(v)}
@@ -360,11 +453,9 @@ export default function ModernJeepneyRegistration() {
           </div>
         </div>
 
-        {/* MODAL */}
         {showModal && (
           <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 p-4">
             <div className={`w-full max-w-[480px] rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 ${t("bg-slate-900 border border-slate-800", "bg-white border border-slate-200")}`}>
-              {/* Modal Header */}
               <div className={`px-8 py-8 flex items-start justify-between border-b ${t("border-slate-800", "border-slate-100")}`}>
                 <div className="flex items-center gap-5">
                   <div className={`p-4 rounded-[24px] shadow-sm border ${t("bg-blue-500/20 border-blue-500/20", "bg-blue-50 border-blue-100")}`}>
@@ -385,7 +476,6 @@ export default function ModernJeepneyRegistration() {
                 </button>
               </div>
 
-              {/* Modal Body */}
               <div className="max-h-[70vh] overflow-y-auto p-8 space-y-6">
                 {errorMessage && (
                   <div className="p-4 rounded-2xl bg-red-500/10 text-red-500 text-sm font-bold border border-red-500/20">
@@ -514,11 +604,10 @@ export default function ModernJeepneyRegistration() {
           </div>
         )}
 
-        {/* SUCCESS NOTIFICATION TILE */}
         {showSuccessModal && (
           <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[3000] animate-in fade-in slide-in-from-top-4 duration-500">
             <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border-2 backdrop-blur-xl ${
-              successType === "register" 
+              successType === "register"
                 ? t("bg-emerald-500/20 border-emerald-500/50 text-emerald-400", "bg-white border-emerald-200 text-emerald-800")
                 : t("bg-blue-500/20 border-blue-500/50 text-blue-400", "bg-white border-blue-200 text-blue-800")
             }`}>
@@ -533,7 +622,7 @@ export default function ModernJeepneyRegistration() {
                   {successType === "register" ? "New vehicle added to fleet" : "Vehicle details have been synced"}
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowSuccessModal(false)}
                 className="ml-4 p-1 hover:bg-black/10 rounded-full transition-colors"
               >
@@ -547,8 +636,6 @@ export default function ModernJeepneyRegistration() {
     </div>
   );
 }
-
-// ─── Sub-components ────────────────────────────────────────────────────────────
 
 function SectionLabel({ color, textColor, label }: { color: string; textColor: string; label: string }) {
   return (

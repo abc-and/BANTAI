@@ -41,18 +41,18 @@ export async function GET() {
     const capacityArr = overcapacityViolations || []
     const speedArr = overspeedingViolations || []
 
-    // Get unique vehicle IDs
+    // Get unique vehicle IDs from both tables
     const vehicleIds = [...new Set([
       ...capacityArr.map(v => v.vehicle_id),
       ...speedArr.map(v => v.vehicle_id)
     ].filter(Boolean))]
 
-    // Fetch vehicle details
+    // Fetch vehicle details — INCLUDE sitting_capacity and standing_capacity
     let vehiclesMap = new Map()
     if (vehicleIds.length > 0) {
       const { data: vehicles } = await supabase
         .from('vehicle')
-        .select('vehicle_id, vehicle_code, plate_number, speed_limit, route:route_id ( route_name ), operator:operator_id ( operator_name )')
+        .select('vehicle_id, vehicle_code, plate_number, speed_limit, sitting_capacity, standing_capacity, route:route_id ( route_name ), operator:operator_id ( operator_name )')
         .in('vehicle_id', vehicleIds)
 
       if (vehicles) {
@@ -60,102 +60,96 @@ export async function GET() {
       }
     }
 
-    // Transform capacity data
+    // ── Transform overcapacity ────────────────────────────────────────────────
     const transformedCapacity = capacityArr.map(violation => {
       const vehicle = vehiclesMap.get(violation.vehicle_id)
-      const sitting = parseInt(violation.recorded_sitting || violation.metadata?.recorded_sitting || 0)
-      const standing = parseInt(violation.recorded_standing || violation.metadata?.recorded_standing || 0)
+
+      const sitting  = parseInt(violation.recorded_sitting  ?? violation.metadata?.recorded_sitting  ?? 0)
+      const standing = parseInt(violation.recorded_standing ?? violation.metadata?.recorded_standing ?? 0)
       const totalPassengers = sitting + standing
 
-      let imageUrl = null
+      const sittingCap = parseInt(vehicle?.sitting_capacity) || 0
+      const standingCap = parseInt(vehicle?.standing_capacity) || 0
+      const realTotalCapacity = (sittingCap + standingCap > 0) ? (sittingCap + standingCap) : 20
+
+      let imageUrl: string | null = null
       if (violation.image_url) {
-        if (violation.image_url.startsWith('http')) {
-          imageUrl = violation.image_url
-        } else {
-          imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/violation-images/${violation.image_url}`
-        }
+        imageUrl = violation.image_url.startsWith('http')
+          ? violation.image_url
+          : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/violation-images/${violation.image_url}`
       }
 
-      let locationStr = "Mandaue City"
-      if (violation.location) {
-        if (typeof violation.location === 'string') {
-          locationStr = violation.location
-        } else if (typeof violation.location === 'object') {
-          const parts = [violation.location.street_name, violation.location.barangay_name].filter(Boolean)
-          locationStr = parts.length > 0 ? parts.join(', ') : "Mandaue City"
-        }
-      }
+      // location JSONB: { latitude, longitude, street_name, barangay_name }
+      const loc = violation.location && typeof violation.location === 'object' ? violation.location : {}
+      const locationStr = [loc.street_name, loc.barangay_name].filter(Boolean).join(', ') || 'Mandaue City'
+      const lat = parseFloat(loc.latitude)  || 10.3235
+      const lng = parseFloat(loc.longitude) || 123.9222
 
       return {
         ...violation,
         id: violation.overcapacity_id,
-        type: "overcapacity",
-        status: violation.status?.toLowerCase() || "pending",
-        vehicle_id: violation.vehicle_id,
-        vehicle_code: vehicle?.vehicle_code || null,
-        plate_number: vehicle?.plate_number || null,
-        route_name: vehicle?.route?.route_name || null,
-        operator_name: vehicle?.operator?.operator_name || "Unknown Operator",
-        display_name: vehicle?.vehicle_code || vehicle?.plate_number || violation.vehicle_id,
+        type: 'overcapacity',
+        status: violation.status?.toLowerCase() || 'pending',
+        vehicle_code:  vehicle?.vehicle_code  || null,
+        plate_number:  vehicle?.plate_number  || null,
+        route_name:    vehicle?.route?.route_name       || null,
+        operator_name: vehicle?.operator?.operator_name || 'Unknown Operator',
         location: locationStr,
-        coordinates: violation.location?.latitude ? [violation.location.latitude, violation.location.longitude] : [10.3235, 123.9222],
+        coordinates: [lat, lng],
         timestamp: violation.detected_at,
         passengerCount: totalPassengers,
-        totalCapacity: 20,
-        excessCount: Math.max(0, totalPassengers - 20),
-        imageUrl: imageUrl,
+        sitting_capacity: sittingCap,
+        standing_capacity: standingCap,
+        totalCapacity: realTotalCapacity,
+        excessCount: Math.max(0, totalPassengers - realTotalCapacity),
+        imageUrl,
       }
     })
 
-    // Transform speeding data
+    // ── Transform overspeeding ────────────────────────────────────────────────
     const transformedSpeed = speedArr.map(violation => {
       const vehicle = vehiclesMap.get(violation.vehicle_id)
-      const speed = violation.speed || violation.metadata?.speed_kph || 0
-      const limit = vehicle?.speed_limit || 60
 
-      let imageUrl = null
+      const speed = parseFloat(violation.speed_detected) || 0
+      const limit = parseFloat(vehicle?.speed_limit) || 0
+      const speedExcess = Math.max(0, Math.round(speed) - limit)
+
+      let imageUrl: string | null = null
       if (violation.image_url) {
-        if (violation.image_url.startsWith('http')) {
-          imageUrl = violation.image_url
-        } else {
-          imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/violation-images/${violation.image_url}`
-        }
+        imageUrl = violation.image_url.startsWith('http')
+          ? violation.image_url
+          : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/violation-images/${violation.image_url}`
       }
 
-      let locationStr = "Mandaue City"
-      if (violation.location) {
-        if (typeof violation.location === 'string') {
-          locationStr = violation.location
-        } else if (typeof violation.location === 'object') {
-          const parts = [violation.location.street_name, violation.location.barangay_name].filter(Boolean)
-          locationStr = parts.length > 0 ? parts.join(', ') : "Mandaue City"
-        }
-      }
+      const loc = violation.location && typeof violation.location === 'object' ? violation.location : {}
+      const locationStr = [loc.street_name, loc.barangay_name].filter(Boolean).join(', ') || 'Mandaue City'
+      const lat = parseFloat(loc.latitude)  || 10.3235
+      const lng = parseFloat(loc.longitude) || 123.9222
 
       return {
         ...violation,
         id: violation.overspeeding_id || violation.id,
-        type: "overspeeding",
-        status: violation.status?.toLowerCase() || "pending",
-        vehicle_id: violation.vehicle_id,
-        vehicle_code: vehicle?.vehicle_code || null,
-        plate_number: vehicle?.plate_number || null,
-        route_name: vehicle?.route?.route_name || null,
-        operator_name: vehicle?.operator?.operator_name || "Unknown Operator",
-        display_name: vehicle?.vehicle_code || vehicle?.plate_number || violation.vehicle_id,
+        type: 'overspeeding',
+        status: violation.status?.toLowerCase() || 'pending',
+        vehicle_code:  vehicle?.vehicle_code  || null,
+        plate_number:  vehicle?.plate_number  || null,
+        route_name:    vehicle?.route?.route_name       || null,
+        operator_name: vehicle?.operator?.operator_name || 'Unknown Operator',
         location: locationStr,
-        coordinates: violation.location?.latitude ? [violation.location.latitude, violation.location.longitude] : [10.3235, 123.9222],
+        coordinates: [lat, lng],
         timestamp: violation.detected_at,
-        speed: Math.round(speed),
-        speedLimit: limit,
-        speedExcess: Math.max(0, Math.round(speed) - limit),
-        imageUrl: imageUrl
+        speed_detected: speed,
+        speed_limit: limit,
+        speed: Math.round(speed),      
+        speedLimit: limit,             
+        speedExcess,
+        imageUrl,
       }
     })
 
     return NextResponse.json({
       overspeeding: transformedSpeed,
-      overcapacity: transformedCapacity
+      overcapacity: transformedCapacity,
     })
 
   } catch (error) {

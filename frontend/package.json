@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
-    "@supabase/supabase-js": "^2.103.0",
+    "@supabase/supabase-js": "^2.105.1",
+    "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^2.4.3",
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",

@@ -5,15 +5,12 @@
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
     "bcryptjs": "^2.4.3",
-    "next": "^16.2.3",
     "pg": "^8.20.0"
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "tsx server.ts",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
-    "seed:admin": "tsx seed-admin.ts"
+    "build": "prisma generate && tsc",
+    "start": "node dist/server.js"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

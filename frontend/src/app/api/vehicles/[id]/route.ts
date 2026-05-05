@@ -1,105 +1,124 @@
+// app/api/vehicles/[id]/route.ts
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: vehicleCode } = await params;
-    const body = await request.json();
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
-        },
-      }
-    )
-
-    // 1. Find operator
-    const { data: operator, error: opError } = await supabase
-      .from("operator")
-      .select("operator_id")
-      .eq("operator_name", body.operatorName)
-      .limit(1)
-      .single();
-
-    if (opError || !operator)
-      return NextResponse.json({ error: "Operator not found" }, { status: 404 });
-
-    // 2. Find or create driver
-    let { data: driver } = await supabase
-      .from("driver")
-      .select("driver_id")
-      .eq("driver_name", body.driverName)
-      .eq("operator_id", operator.operator_id)
-      .limit(1)
-      .maybeSingle();
-
-    if (!driver) {
-      const { data: newDriver, error: driverError } = await supabase
-        .from("driver")
-        .insert({ driver_name: body.driverName, operator_id: operator.operator_id })
-        .select("driver_id")
-        .limit(1)
-        .single();
-
-      if (driverError)
-        return NextResponse.json({ error: driverError.message }, { status: 500 });
-
-      driver = newDriver;
-    }
-
-    // 3. Find route
-    const { data: route, error: routeError } = await supabase
-      .from("route")
-      .select("route_id")
-      .eq("route_name", body.routeName)
-      .limit(1)
-      .single();
-
-    if (routeError || !route)
-      return NextResponse.json({ error: "Route not found" }, { status: 404 });
-
-    // 4. Update vehicle
-    const { data: vehicle, error } = await supabase
-      .from("vehicle")
-      .update({
-        plate_number: body.plateNumber,
-        sitting_capacity: body.sittingCapacity,
-        standing_capacity: body.standingCapacity,
-        operator_id: operator.operator_id,
-        driver_id: driver!.driver_id,
-        route_id: route.route_id,
-        speed_limit: body.speedLimit,
-        vehicle_type: body.vehicleType,
-      })
-      .eq("vehicle_code", vehicleCode)
-      .select();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!vehicle || vehicle.length === 0) return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
-
-    return NextResponse.json(vehicle[0]);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+// Copy the same getAuthUser function from the main route.ts
+async function getAuthUser(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
   }
+
+  const token = authHeader.substring(7);
+  const parts = token.split("-");
+  if (parts[0] !== "token" || parts.length < 2) {
+    return null;
+  }
+
+  const userId = parts.slice(1, -1).join("-");
+  
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
+  const { data: bantaiUser } = await supabaseAdmin
+    .from("bantai_users")
+    .select("id, role, username")
+    .eq("id", userId)
+    .maybeSingle();
+  
+  if (bantaiUser) {
+    let operatorId: string | undefined;
+    let operatorName: string | undefined;
+    
+    if (bantaiUser.role === "ADMIN") {
+      const { data: opUser } = await supabaseAdmin
+        .from("operator_user")
+        .select(`
+          operator_id,
+          operator:operator_id ( operator_name )
+        `)
+        .eq("username", bantaiUser.username)
+        .maybeSingle();
+      
+      if (opUser) {
+        operatorId = opUser.operator_id;
+        operatorName = (opUser.operator as any)?.operator_name;
+      }
+    }
+    
+    let effectiveRole = bantaiUser.role;
+    if (bantaiUser.role === "ADMIN" && !operatorId) {
+      effectiveRole = "SUPERADMIN";
+    }
+    
+    return {
+      id: bantaiUser.id,
+      role: effectiveRole.toUpperCase(),
+      operatorId: operatorId,
+      operatorName: operatorName,
+    };
+  }
+  
+  const { data: opUser } = await supabaseAdmin
+    .from("operator_user")
+    .select("user_id, role, operator_id, operator:operator_id ( operator_name )")
+    .eq("user_id", userId)
+    .maybeSingle();
+  
+  if (opUser) {
+    return {
+      id: opUser.user_id,
+      role: opUser.role.toUpperCase(),
+      operatorId: opUser.operator_id,
+      operatorName: (opUser.operator as any)?.operator_name,
+    };
+  }
+  
+  return null;
+}
+
+function addCorsHeaders(response: NextResponse) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return response;
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
 
 export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
+    const currentUser = await getAuthUser(request);
+    if (!currentUser) {
+      const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return addCorsHeaders(response);
+    }
+
     const body = await request.json();
-    const { status, type } = body;
+    const { status } = body;
+    const id = params.id;
+    
+    if (!status) {
+      const response = NextResponse.json({ error: "Status is required" }, { status: 400 });
+      return addCorsHeaders(response);
+    }
+
     const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -113,35 +132,139 @@ export async function PATCH(
       }
     )
 
-    if (type) {
-      const isOverspeeding = type === "overspeeding" || type === "overspeed";
-      const table = isOverspeeding
-        ? "overspeeding_violations"
-        : "overcapacity_violations";
-      
-      const idCol = isOverspeeding ? "overspeeding_id" : "overcapacity_id";
+    const isSuperAdmin = currentUser.role === "SUPERADMIN" || currentUser.role === "SUPER_ADMIN";
+    
+    let query = supabase
+      .from("vehicle")
+      .update({ status: status })
+      .eq("vehicle_code", id);
+    
+    if (!isSuperAdmin && currentUser.operatorId) {
+      query = query.eq("operator_id", currentUser.operatorId);
+    }
+    
+    const { error } = await query;
 
-      const { error } = await supabase
-        .from(table)
-        .update({ status: status.toUpperCase(), updated_at: new Date().toISOString() })
-        .eq(idCol, id);
-
-      if (error)
-        return NextResponse.json({ error: error.message }, { status: 500 });
-
-      return NextResponse.json({ success: true });
+    if (error) {
+      const response = NextResponse.json({ error: error.message }, { status: 500 });
+      return addCorsHeaders(response);
     }
 
-    const { data, error } = await supabase
-      .from("vehicle")
-      .update({ status })
-      .eq("vehicle_code", id)
-      .select();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!data || data.length === 0) return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
-    return NextResponse.json(data[0]);
+    const response = NextResponse.json({ success: true });
+    return addCorsHeaders(response);
+    
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("PATCH vehicle error:", err);
+    const response = NextResponse.json({ error: err.message }, { status: 500 });
+    return addCorsHeaders(response);
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const currentUser = await getAuthUser(request);
+    if (!currentUser) {
+      const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return addCorsHeaders(response);
+    }
+
+    const body = await request.json();
+    const { driverName, plateNumber, vehicleType, routeName, sittingCapacity, standingCapacity, speedLimit } = body;
+    const id = params.id;
+
+    const cookieStore = await cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+        },
+      }
+    )
+
+    const isSuperAdmin = currentUser.role === "SUPERADMIN" || currentUser.role === "SUPER_ADMIN";
+    
+    let vehicleQuery = supabase
+      .from("vehicle")
+      .select("operator_id, vehicle_id")
+      .eq("vehicle_code", id);
+    
+    if (!isSuperAdmin && currentUser.operatorId) {
+      vehicleQuery = vehicleQuery.eq("operator_id", currentUser.operatorId);
+    }
+    
+    const { data: existingVehicle, error: fetchError } = await vehicleQuery.single();
+    
+    if (fetchError || !existingVehicle) {
+      const response = NextResponse.json({ error: "Vehicle not found or access denied" }, { status: 404 });
+      return addCorsHeaders(response);
+    }
+    
+    let driverId: string;
+    const { data: existingDriver } = await supabase
+      .from("driver")
+      .select("driver_id")
+      .eq("driver_name", driverName)
+      .eq("operator_id", existingVehicle.operator_id)
+      .maybeSingle();
+    
+    if (existingDriver) {
+      driverId = existingDriver.driver_id;
+    } else {
+      const { data: newDriver, error: driverError } = await supabase
+        .from("driver")
+        .insert({ driver_name: driverName, operator_id: existingVehicle.operator_id })
+        .select("driver_id")
+        .single();
+      
+      if (driverError) {
+        const response = NextResponse.json({ error: driverError.message }, { status: 500 });
+        return addCorsHeaders(response);
+      }
+      driverId = newDriver.driver_id;
+    }
+    
+    const { data: route } = await supabase
+      .from("route")
+      .select("route_id")
+      .eq("route_name", routeName)
+      .single();
+    
+    if (!route) {
+      const response = NextResponse.json({ error: "Route not found" }, { status: 404 });
+      return addCorsHeaders(response);
+    }
+    
+    const { error: updateError } = await supabase
+      .from("vehicle")
+      .update({
+        plate_number: plateNumber,
+        driver_id: driverId,
+        route_id: route.route_id,
+        sitting_capacity: sittingCapacity,
+        standing_capacity: standingCapacity,
+        speed_limit: speedLimit,
+        vehicle_type: vehicleType,
+      })
+      .eq("vehicle_id", existingVehicle.vehicle_id);
+    
+    if (updateError) {
+      const response = NextResponse.json({ error: updateError.message }, { status: 500 });
+      return addCorsHeaders(response);
+    }
+    
+    const response = NextResponse.json({ success: true });
+    return addCorsHeaders(response);
+    
+  } catch (err: any) {
+    console.error("PUT vehicle error:", err);
+    const response = NextResponse.json({ error: err.message }, { status: 500 });
+    return addCorsHeaders(response);
   }
 }

@@ -1,3 +1,4 @@
+// context/AuthContext.tsx
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -22,6 +23,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const storedToken = localStorage.getItem("token");
         const storedUser = localStorage.getItem("user");
+        console.log("Stored token exists:", !!storedToken); // Debug
+        console.log("Stored user exists:", !!storedUser); // Debug
+        
         if (storedToken && storedUser) {
             setToken(storedToken);
             setUser(JSON.parse(storedUser));
@@ -30,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const login = (token: string, user: User) => {
+        console.log("Logging in with token:", token.substring(0, 20) + "..."); // Debug
         localStorage.setItem("token", token);
         localStorage.setItem("user", JSON.stringify(user));
         setToken(token);
