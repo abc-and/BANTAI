@@ -21,7 +21,7 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
-const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -39,6 +39,7 @@ const response = await fetch('/api/auth/login', {
       };
 
       authLogin(data.token, mappedUser);
+      router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred.');
       setIsLoading(false);
