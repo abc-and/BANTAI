@@ -28,73 +28,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
     }
 
-    let userId: string;
-    let userEmail: string | null = null;
-    let userFirstName = "";
-    let userLastName = "";
-    let userRole = "";
-    let userIsActive = true;
-    let operatorId: string | undefined;
-    let operatorName: string | undefined;
-
-    // Query bantai_users
-    const { data: bantaiUser, error: bantaiError } = await supabaseAdmin
-      .from("bantai_users")
-      .select("id, username, email, password, role, first_name, last_name, is_active")
+    // Query operator_user table (single source of truth)
+    const { data: opUser, error: opError } = await supabaseAdmin
+      .from("operator_user")
+      .select(`
+        user_id,
+        username,
+        email,
+        password_hash,
+        role,
+        employee_name,
+        contact_number,
+        operator_id,
+        operator:operator_id ( operator_name )
+      `)
       .eq("username", username)
-      .single();
+      .maybeSingle();
 
-    if (bantaiError || !bantaiUser) {
+    if (opError || !opUser) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    // Check password
-    const isValid = await bcrypt.compare(password, bantaiUser.password);
+    // Verify password
+    const isValid = await bcrypt.compare(password, opUser.password_hash);
     if (!isValid) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    userId = bantaiUser.id;
-    userEmail = bantaiUser.email;
-    userFirstName = bantaiUser.first_name || username;
-    userLastName = bantaiUser.last_name || "";
-    userRole = bantaiUser.role;
-    userIsActive = bantaiUser.is_active ?? true;
-
-    // Check if linked to operator
-    if (userRole === "ADMIN") {
-      const { data: opUser } = await supabaseAdmin
-        .from("operator_user")
-        .select(`operator_id, operator:operator_id ( operator_name )`)
-        .eq("username", username)
-        .maybeSingle();
-
-      if (opUser) {
-        operatorId = opUser.operator_id;
-        operatorName = (opUser.operator as any)?.operator_name;
-      }
-    }
-
-    // Determine role
-    let effectiveRole = userRole;
-    if (userRole === "ADMIN" && !operatorId) {
+    // SUPERADMIN = role is SUPERADMIN, or role is ADMIN with no operator_id
+    let effectiveRole = opUser.role.toUpperCase();
+    if (effectiveRole === "ADMIN" && !opUser.operator_id) {
       effectiveRole = "SUPERADMIN";
     }
-    effectiveRole = effectiveRole.toUpperCase();
 
-    const token = `token-${userId}-${Date.now()}`;
+    const operatorName = (opUser.operator as any)?.operator_name ?? undefined;
+    const token = `token-${opUser.user_id}-${Date.now()}`;
+
+    // Split employee_name into firstName / lastName for UI compatibility
+    const nameParts = (opUser.employee_name ?? "").trim().split(" ");
+    const firstName = nameParts[0] ?? username;
+    const lastName = nameParts.slice(1).join(" ");
 
     return NextResponse.json({
-      token: token,
+      token,
       user: {
-        id: userId,
-        email: userEmail,
-        firstName: userFirstName,
-        lastName: userLastName,
+        id: opUser.user_id,
+        email: opUser.email,
+        firstName,
+        lastName,
         role: effectiveRole,
-        operatorId: operatorId,
-        operatorName: operatorName,
-        isActive: userIsActive,
+        operatorId: opUser.operator_id ?? undefined,
+        operatorName,
+        isActive: true,
         createdAt: new Date().toISOString(),
       },
     });
