@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
-const API = "http://localhost:4000";
+const API = "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
