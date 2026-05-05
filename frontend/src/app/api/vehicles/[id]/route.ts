@@ -10,41 +10,47 @@ async function getAuthUser(request: NextRequest) {
 
   const token = authHeader.substring(7);
   const parts = token.split("-");
-  if (parts[0] !== "token" || parts.length < 2) return null;
 
-  const userId = parts.slice(1, -1).join("-");
-  
+  if (parts[0] !== "token" || parts.length < 3) return null;
+
+  // ✅ Fixed: use timestamp-based parsing (matches main route.ts)
+  const timestampIndex = parts.findIndex((p, i) => i > 0 && /^\d{13}$/.test(p));
+  if (timestampIndex === -1) return null;
+
+  const userId = parts.slice(1, timestampIndex).join("-");
+  if (!userId) return null;
+
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-  
+
   const { data: bantaiUser } = await supabaseAdmin
     .from("bantai_users")
     .select("id, role, username")
     .eq("id", userId)
     .maybeSingle();
-  
+
   if (bantaiUser) {
     let operatorId: string | undefined;
     let operatorName: string | undefined;
-    
+
     if (bantaiUser.role === "ADMIN") {
       const { data: opUser } = await supabaseAdmin
         .from("operator_user")
         .select(`operator_id, operator:operator_id ( operator_name )`)
         .eq("username", bantaiUser.username)
         .maybeSingle();
-      
+
       if (opUser) {
         operatorId = opUser.operator_id;
         operatorName = (opUser.operator as any)?.operator_name;
       }
     }
-    
+
     let effectiveRole = bantaiUser.role;
     if (bantaiUser.role === "ADMIN" && !operatorId) effectiveRole = "SUPERADMIN";
-    
+
     return {
       id: bantaiUser.id,
       role: effectiveRole.toUpperCase(),
@@ -52,13 +58,13 @@ async function getAuthUser(request: NextRequest) {
       operatorName,
     };
   }
-  
+
   const { data: opUser } = await supabaseAdmin
     .from("operator_user")
     .select("user_id, role, operator_id, operator:operator_id ( operator_name )")
     .eq("user_id", userId)
     .maybeSingle();
-  
+
   if (opUser) {
     return {
       id: opUser.user_id,
@@ -67,7 +73,7 @@ async function getAuthUser(request: NextRequest) {
       operatorName: (opUser.operator as any)?.operator_name,
     };
   }
-  
+
   return null;
 }
 
@@ -89,6 +95,7 @@ export async function OPTIONS() {
   });
 }
 
+// ── PATCH: Update vehicle status ──────────────────────────────────────────────
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -102,7 +109,7 @@ export async function PATCH(
 
     const body = await request.json();
     const { status } = body;
-    
+
     if (!status) {
       return addCorsHeaders(NextResponse.json({ error: "Status is required" }, { status: 400 }));
     }
@@ -115,25 +122,26 @@ export async function PATCH(
     );
 
     const isSuperAdmin = currentUser.role === "SUPERADMIN" || currentUser.role === "SUPER_ADMIN";
-    
+
     let query = supabase.from("vehicle").update({ status }).eq("vehicle_code", id);
     if (!isSuperAdmin && currentUser.operatorId) {
       query = query.eq("operator_id", currentUser.operatorId);
     }
-    
+
     const { error } = await query;
     if (error) {
       return addCorsHeaders(NextResponse.json({ error: error.message }, { status: 500 }));
     }
 
     return addCorsHeaders(NextResponse.json({ success: true }));
-    
+
   } catch (err: any) {
     console.error("PATCH vehicle error:", err);
     return addCorsHeaders(NextResponse.json({ error: err.message }, { status: 500 }));
   }
 }
 
+// ── PUT: Update vehicle details ───────────────────────────────────────────────
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -156,25 +164,29 @@ export async function PUT(
     );
 
     const isSuperAdmin = currentUser.role === "SUPERADMIN" || currentUser.role === "SUPER_ADMIN";
-    
-    let vehicleQuery = supabase.from("vehicle").select("operator_id, vehicle_id").eq("vehicle_code", id);
+
+    let vehicleQuery = supabase
+      .from("vehicle")
+      .select("operator_id, vehicle_id")
+      .eq("vehicle_code", id);
+
     if (!isSuperAdmin && currentUser.operatorId) {
       vehicleQuery = vehicleQuery.eq("operator_id", currentUser.operatorId);
     }
-    
+
     const { data: existingVehicle, error: fetchError } = await vehicleQuery.single();
     if (fetchError || !existingVehicle) {
       return addCorsHeaders(NextResponse.json({ error: "Vehicle not found or access denied" }, { status: 404 }));
     }
-    
+
     let driverId: string;
     const { data: existingDriver } = await supabase
       .from("driver")
       .select("driver_id")
-      .eq("driver_name", driverName)
+      .ilike("driver_name", driverName)
       .eq("operator_id", existingVehicle.operator_id)
       .maybeSingle();
-    
+
     if (existingDriver) {
       driverId = existingDriver.driver_id;
     } else {
@@ -183,18 +195,23 @@ export async function PUT(
         .insert({ driver_name: driverName, operator_id: existingVehicle.operator_id })
         .select("driver_id")
         .single();
-      
+
       if (driverError) {
         return addCorsHeaders(NextResponse.json({ error: driverError.message }, { status: 500 }));
       }
       driverId = newDriver.driver_id;
     }
-    
-    const { data: route } = await supabase.from("route").select("route_id").eq("route_name", routeName).single();
+
+    const { data: route } = await supabase
+      .from("route")
+      .select("route_id")
+      .ilike("route_name", routeName)
+      .single();
+
     if (!route) {
       return addCorsHeaders(NextResponse.json({ error: "Route not found" }, { status: 404 }));
     }
-    
+
     const { error: updateError } = await supabase
       .from("vehicle")
       .update({
@@ -207,15 +224,68 @@ export async function PUT(
         vehicle_type: vehicleType,
       })
       .eq("vehicle_id", existingVehicle.vehicle_id);
-    
+
     if (updateError) {
       return addCorsHeaders(NextResponse.json({ error: updateError.message }, { status: 500 }));
     }
-    
+
     return addCorsHeaders(NextResponse.json({ success: true }));
-    
+
   } catch (err: any) {
     console.error("PUT vehicle error:", err);
+    return addCorsHeaders(NextResponse.json({ error: err.message }, { status: 500 }));
+  }
+}
+
+// ── DELETE: Remove a vehicle ──────────────────────────────────────────────────
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const currentUser = await getAuthUser(request);
+    if (!currentUser) {
+      return addCorsHeaders(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+    }
+
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
+    );
+
+    const isSuperAdmin = currentUser.role === "SUPERADMIN" || currentUser.role === "SUPER_ADMIN";
+
+    // Find the vehicle first to get internal vehicle_id
+    let vehicleQuery = supabase
+      .from("vehicle")
+      .select("vehicle_id, operator_id")
+      .eq("vehicle_code", id);
+
+    if (!isSuperAdmin && currentUser.operatorId) {
+      vehicleQuery = vehicleQuery.eq("operator_id", currentUser.operatorId);
+    }
+
+    const { data: existingVehicle, error: fetchError } = await vehicleQuery.single();
+    if (fetchError || !existingVehicle) {
+      return addCorsHeaders(NextResponse.json({ error: "Vehicle not found or access denied" }, { status: 404 }));
+    }
+
+    const { error: deleteError } = await supabase
+      .from("vehicle")
+      .delete()
+      .eq("vehicle_id", existingVehicle.vehicle_id);
+
+    if (deleteError) {
+      return addCorsHeaders(NextResponse.json({ error: deleteError.message }, { status: 500 }));
+    }
+
+    return addCorsHeaders(NextResponse.json({ success: true }));
+
+  } catch (err: any) {
+    console.error("DELETE vehicle error:", err);
     return addCorsHeaders(NextResponse.json({ error: err.message }, { status: 500 }));
   }
 }
