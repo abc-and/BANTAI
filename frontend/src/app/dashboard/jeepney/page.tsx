@@ -4,7 +4,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
-import { Bus, Edit, Search, X, Plus, CheckCircle, RefreshCw } from "lucide-react";
+import { Bus, Edit, Search, X, Plus, CheckCircle, RefreshCw, Trash2 } from "lucide-react";
 
 export interface ModernJeepney {
   vehicleId: string;
@@ -45,6 +45,11 @@ export default function ModernJeepneyRegistration() {
   const [successType, setSuccessType] = useState<"register" | "update">("register");
   const [isLoading, setIsLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+
+  // Delete state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [vehicleToDelete, setVehicleToDelete] = useState<ModernJeepney | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [vehicleId, setVehicleId] = useState("");
   const [driverName, setDriverName] = useState("");
@@ -90,7 +95,7 @@ export default function ModernJeepneyRegistration() {
         setIsLoading(false);
         return;
       }
-      
+
       const response = await fetch(`/api/vehicles?t=${Date.now()}`, {
         method: 'GET',
         headers: {
@@ -98,17 +103,17 @@ export default function ModernJeepneyRegistration() {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData?.error || "Failed to load vehicles");
       }
       const rawVehicles = await response.json();
-      
+
       let filtered: ModernJeepney[] = rawVehicles.map(normalizeVehicle);
 
       const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
-      
+
       if (user && !isSuperAdmin && user.operatorName) {
         const userOperatorNormalized = user.operatorName.toLowerCase().trim();
         filtered = filtered.filter(v => {
@@ -130,9 +135,7 @@ export default function ModernJeepneyRegistration() {
     try {
       const token = getAuthToken();
       const response = await fetch("/api/operators", {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to load operators");
       const data = await response.json();
@@ -146,9 +149,7 @@ export default function ModernJeepneyRegistration() {
     try {
       const token = getAuthToken();
       const res = await fetch("/api/routes", {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to load routes");
       const data = await res.json();
@@ -205,6 +206,39 @@ export default function ModernJeepneyRegistration() {
     setShowModal(true);
   };
 
+  const openDeleteModal = (vehicle: ModernJeepney) => {
+    setVehicleToDelete(vehicle);
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setVehicleToDelete(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!vehicleToDelete) return;
+    setIsDeleting(true);
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`/api/vehicles/${vehicleToDelete.vehicleId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ operatorName: vehicleToDelete.operator }),
+      });
+      if (!response.ok) throw new Error("Failed to delete vehicle");
+      await loadVehicles();
+      closeDeleteModal();
+    } catch (error) {
+      console.error("Delete error:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   useEffect(() => {
     if (user && user.operatorName && !operator) {
       setOperator(user.operatorName);
@@ -235,7 +269,7 @@ export default function ModernJeepneyRegistration() {
         editingVehicle ? `/api/vehicles/${editingVehicle.vehicleId}` : "/api/vehicles",
         {
           method: editingVehicle ? "PUT" : "POST",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             'Authorization': `Bearer ${token}`,
           },
@@ -269,7 +303,7 @@ export default function ModernJeepneyRegistration() {
       const token = getAuthToken();
       const response = await fetch(`/api/vehicles/${id}/status`, {
         method: "PATCH",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           'Authorization': `Bearer ${token}`,
         },
@@ -347,7 +381,8 @@ export default function ModernJeepneyRegistration() {
         <div className="flex-1 overflow-hidden p-4">
           <div className={`h-full rounded-2xl border flex flex-col overflow-hidden transition-all duration-300 ${t("bg-[#1e293b] border-slate-700 shadow-xl", "bg-white border-slate-200 shadow-sm")}`}>
 
-            <div className={`grid grid-cols-[52px_110px_110px_140px_90px_1fr_70px_80px_90px_130px_72px] px-3 py-3 border-b-2 text-[10px] font-extrabold tracking-widest uppercase transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700 text-slate-400", "bg-blue-50 border-blue-200 text-slate-600")}`}>
+            {/* Header Row */}
+            <div className={`grid grid-cols-[52px_110px_110px_140px_90px_1fr_70px_80px_90px_130px_72px_72px] px-3 py-3 border-b-2 text-[10px] font-extrabold tracking-widest uppercase transition-colors duration-300 ${t("bg-slate-800/50 border-slate-700 text-slate-400", "bg-blue-50 border-blue-200 text-slate-600")}`}>
               <div className="text-center">Status</div>
               <div>Vehicle ID</div>
               <div className="text-center">Plate</div>
@@ -359,6 +394,7 @@ export default function ModernJeepneyRegistration() {
               <div className="text-center">Speed</div>
               <div>Operator</div>
               <div className="text-center">Edit</div>
+              <div className="text-center">Delete</div>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -382,7 +418,7 @@ export default function ModernJeepneyRegistration() {
                 filteredVehicles.map((v, index) => (
                   <div
                     key={`${v.vehicleId}-${v.operator}-${index}`}
-                    className={`grid grid-cols-[52px_110px_110px_140px_90px_1fr_70px_80px_90px_130px_72px] px-3 py-3 border-b transition-all duration-200 ${t("border-slate-800 hover:bg-slate-800/40", "border-slate-100 hover:bg-slate-50")}`}
+                    className={`grid grid-cols-[52px_110px_110px_140px_90px_1fr_70px_80px_90px_130px_72px_72px] px-3 py-3 border-b transition-all duration-200 ${t("border-slate-800 hover:bg-slate-800/40", "border-slate-100 hover:bg-slate-50")}`}
                   >
                     <div className="flex justify-center items-center">
                       <button
@@ -438,12 +474,23 @@ export default function ModernJeepneyRegistration() {
                       {v.operator}
                     </div>
 
+                    {/* Edit Button */}
                     <div className="flex justify-center items-center">
                       <button
                         onClick={() => startEdit(v)}
                         className={`p-1.5 rounded-lg transition-all hover:scale-110 active:scale-95 ${t("text-blue-400 hover:bg-slate-800", "text-blue-600 hover:bg-blue-50")}`}
                       >
                         <Edit size={16} strokeWidth={2.5} />
+                      </button>
+                    </div>
+
+                    {/* Delete Button */}
+                    <div className="flex justify-center items-center">
+                      <button
+                        onClick={() => openDeleteModal(v)}
+                        className={`p-1.5 rounded-lg transition-all hover:scale-110 active:scale-95 ${t("text-rose-400 hover:bg-slate-800", "text-rose-500 hover:bg-rose-50")}`}
+                      >
+                        <Trash2 size={16} strokeWidth={2.5} />
                       </button>
                     </div>
                   </div>
@@ -453,6 +500,7 @@ export default function ModernJeepneyRegistration() {
           </div>
         </div>
 
+        {/* Register / Edit Modal */}
         {showModal && (
           <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 p-4">
             <div className={`w-full max-w-[480px] rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 ${t("bg-slate-900 border border-slate-800", "bg-white border border-slate-200")}`}>
@@ -604,6 +652,55 @@ export default function ModernJeepneyRegistration() {
           </div>
         )}
 
+        {/* Confirm Delete Modal */}
+        {showDeleteModal && vehicleToDelete && (
+          <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-300 p-4">
+            <div className={`w-full max-w-[400px] rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 ${t("bg-slate-900 border border-slate-800", "bg-white border border-slate-200")}`}>
+
+              <div className={`px-8 py-8 flex flex-col items-center text-center gap-4 border-b ${t("border-slate-800", "border-slate-100")}`}>
+                <div className="p-4 rounded-full bg-rose-500/10 border border-rose-500/20">
+                  <Trash2 className="w-10 h-10 text-rose-500" />
+                </div>
+                <div>
+                  <h2 className={`text-xl font-black tracking-tight uppercase ${t("text-white", "text-slate-800")}`}>
+                    Delete Vehicle
+                  </h2>
+                  <p className={`text-sm mt-2 ${t("text-slate-400", "text-slate-500")}`}>
+                    Are you sure you want to delete<br />
+                    <span className={`font-black ${t("text-white", "text-slate-800")}`}>
+                      {vehicleToDelete.vehicleId}
+                    </span>
+                    {" — "}
+                    <span className="font-semibold">{vehicleToDelete.plateNumber}</span>?
+                  </p>
+                  <p className="text-[10px] text-rose-400 font-bold uppercase tracking-widest mt-3">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-8 py-6 flex gap-3">
+                <button
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="flex-1 py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-rose-600/20 transition-all active:scale-95 disabled:opacity-60"
+                >
+                  {isDeleting ? "DELETING..." : "YES, DELETE"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  className={`px-8 py-4 rounded-2xl font-bold text-sm uppercase transition-all ${t("bg-slate-800 hover:bg-slate-700 text-slate-300", "bg-slate-100 hover:bg-slate-200 text-slate-600")}`}
+                >
+                  CANCEL
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Success Toast */}
         {showSuccessModal && (
           <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[3000] animate-in fade-in slide-in-from-top-4 duration-500">
             <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border-2 backdrop-blur-xl ${
