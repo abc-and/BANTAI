@@ -314,7 +314,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/api/vehicles" && req.method === "POST") {
     try {
       const body = await parseJson(req);
-      const { operator_id, driver_id, route_id, vehicle_code, plate_number, sitting_capacity, standing_capacity } = body;
+      const { operator_id, driver_id, route_id, vehicle_code, plate_number, sitting_capacity, standing_capacity, speed_limit } = body;
 
       if (!operator_id || !driver_id || !route_id || !vehicle_code || !plate_number) {
         sendJson(res, { error: "All fields are required" }, 400);
@@ -330,6 +330,7 @@ const server = http.createServer(async (req, res) => {
           plate_number,
           sitting_capacity: Number(sitting_capacity),
           standing_capacity: Number(standing_capacity),
+          speed_limit: Number(speed_limit) || 0, 
         },
         include: { operator: true, driver: true, route: true },
       });
