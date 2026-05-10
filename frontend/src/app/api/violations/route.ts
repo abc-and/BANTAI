@@ -31,6 +31,11 @@ export async function GET(request: Request) {
       capacityQuery = capacityQuery
         .not('status', 'eq', 'CONFIRMED')
         .not('status', 'eq', 'DISMISSED')
+        .not('status', 'eq', 'RESOLVED')   
+    }else {
+      // When includeConfirmed=true, only fetch CONFIRMED and RESOLVED for the violations/history pages
+      capacityQuery = capacityQuery
+        .or('status.eq.CONFIRMED,status.eq.RESOLVED')
     }
 
     const { data: overcapacityViolations, error: capacityError } = await capacityQuery
@@ -49,6 +54,10 @@ export async function GET(request: Request) {
       speedQuery = speedQuery
         .not('status', 'eq', 'CONFIRMED')
         .not('status', 'eq', 'DISMISSED')
+        .not('status', 'eq', 'RESOLVED')
+    }else {
+      speedQuery = speedQuery
+        .or('status.eq.CONFIRMED,status.eq.RESOLVED')
     }
 
     const { data: overspeedingViolations, error: speedError } = await speedQuery

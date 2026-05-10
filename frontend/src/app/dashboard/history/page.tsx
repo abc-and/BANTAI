@@ -87,7 +87,7 @@ export default function ViolationHistory() {
     const loadHistory = useCallback(async () => {
         setIsLoading(true);
         try {
-            const response = await fetch("/api/violations");
+            const response = await fetch("/api/violations?includeConfirmed=true");
             if (!response.ok) throw new Error("Failed to fetch history");
             const data = await response.json();
 
