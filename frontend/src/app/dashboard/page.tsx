@@ -13,7 +13,8 @@ import { createBrowserClient } from '@supabase/ssr'
 import {
   Car, Calendar, Clock, Gauge, Weight, CheckCircle, XCircle,
   AlertTriangle, MapPin, Navigation, Search, Filter, X,
-  Layers, Map as MapIcon, Satellite, Mountain, Globe, RefreshCw, ZoomIn, Camera
+  Layers, Map as MapIcon, Satellite, Mountain, Globe, RefreshCw, ZoomIn, Camera,
+  ArrowRight
 } from "lucide-react";
 
 type ViolationType = "overcapacity" | "overspeeding";
@@ -41,12 +42,11 @@ interface Violation {
   sittingCapacity?: number;
   standingCapacity?: number;
   breachTypes?: string[];
-  // Dual camera images — only on overcapacity
   imageUrlFront?: string;
   imageUrlRear?: string;
-  // Legacy single-image fallback
   imageUrl?: string;
   operator?: string;
+  driverName?: string;
 }
 
 function mapStatus(status: string): ViolationStatus {
@@ -100,12 +100,8 @@ async function fetchAllViolations(): Promise<Violation[]> {
           ? [row.coordinates[0], row.coordinates[1]]
           : [10.3235, 123.9222];
 
-        // Resolve dual camera images — prefer explicit columns, fall back to legacy image_url
-        const imageUrlFront: string | undefined =
-          row.image_url_front || undefined;
-        const imageUrlRear: string | undefined =
-          row.image_url_rear || undefined;
-        // Legacy fallback: if neither column is set but old image_url exists, treat it as front
+        const imageUrlFront: string | undefined = row.image_url_front || undefined;
+        const imageUrlRear: string | undefined = row.image_url_rear || undefined;
         const imageUrlLegacy: string | undefined =
           (!imageUrlFront && !imageUrlRear)
             ? (row.imageUrl || row.image_url || undefined)
@@ -120,6 +116,7 @@ async function fetchAllViolations(): Promise<Violation[]> {
           routeName: row.route_name || "Unknown Route",
           location: row.location || "Mandaue City",
           coordinates: coords,
+          driverName: row.driver_name || "Unknown Driver",
           timestamp: row.detected_at ? new Date(row.detected_at) : new Date(),
           passengerCount: totalPassengers,
           totalCapacity: legalCapacity,
@@ -157,6 +154,7 @@ async function fetchAllViolations(): Promise<Violation[]> {
           coordinates: coords,
           timestamp: row.detected_at ? new Date(row.detected_at) : new Date(),
           speed: row.speed ?? 0,
+          driverName: row.driver_name || "Unknown Driver",
           speedLimit: row.speedLimit ?? 0,
           speedExcess: row.speedExcess ?? 0,
           imageUrl: row.imageUrl || row.image_url || undefined,
@@ -175,11 +173,13 @@ async function fetchAllViolations(): Promise<Violation[]> {
 
 async function updateViolationStatus(id: string, type: ViolationType, newStatus: ViolationStatus) {
   const dbStatus = mapStatusToDb(newStatus);
-  await fetch(`/api/violations/${id}`, {
+  const response = await fetch(`/api/violations/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status: dbStatus, type }),
   });
+  const data = await response.json();
+  console.log("PATCH response:", response.status, data); // ADD THIS
 }
 
 const ESRI_TRANSPORT_OVERLAY = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}";
@@ -209,12 +209,24 @@ const createCustomIcon = (color: string, isVerified = false) =>
 const overspeedingIcon = createCustomIcon("#ef4444");
 const overcapacityIcon = createCustomIcon("#3b82f6");
 const verifiedIcon = createCustomIcon("#22c55e", true);
+// Highlighted icon for selected sidebar item
+const selectedIcon = createCustomIcon("#f59e0b");
 
 const t = (isDark: boolean, dark: string, light: string) => isDark ? dark : light;
 
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   useEffect(() => { map.setView(center, zoom); }, [center, zoom, map]);
+  return null;
+}
+
+// ── FIX 1: New component that flies the map to a violation's coordinates ──────
+function MapFlyTo({ target }: { target: { coords: [number, number]; id: string } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!target) return;
+    map.flyTo(target.coords, 17, { animate: true, duration: 1.2 });
+  }, [target, map]);
   return null;
 }
 
@@ -231,19 +243,35 @@ function MapLayerController({ layerType }: { layerType: MapLayerType }) {
   return null;
 }
 
-function ViolationMarker({ violation, onClick }: { violation: Violation; onClick: () => void }) {
+function ViolationMarker({
+  violation,
+  isSelected,
+  onClick,
+}: {
+  violation: Violation;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
   if (!violation || !violation.coordinates || !violation.id) return null;
   const lat = violation.coordinates[0];
   const lng = violation.coordinates[1];
   if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) return null;
 
-  const icon = violation.status === "verified" ? verifiedIcon : violation.type === "overspeeding" ? overspeedingIcon : overcapacityIcon;
+  // ── FIX 1: Use highlighted icon when this marker is the selected sidebar item ──
+  const icon = isSelected
+    ? selectedIcon
+    : violation.status === "verified"
+    ? verifiedIcon
+    : violation.type === "overspeeding"
+    ? overspeedingIcon
+    : overcapacityIcon;
+
   const displayLocation = typeof violation.location === 'string' ? violation.location : 'Unknown Location';
 
   return (
     <Marker position={violation.coordinates} icon={icon} eventHandlers={{ click: onClick }}>
       <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
-        <div className={"h-1 " + (violation.status === "verified" ? "bg-emerald-500" : violation.type === "overspeeding" ? "bg-red-500" : "bg-blue-500")} />
+        <div className={"h-1 " + (isSelected ? "bg-amber-500" : violation.status === "verified" ? "bg-emerald-500" : violation.type === "overspeeding" ? "bg-red-500" : "bg-blue-500")} />
         <div className="px-3 py-2">
           <div className="font-semibold mb-1">{violation.plateNumber}</div>
           <div className="flex items-center gap-1 text-[10px] mb-0.5">
@@ -337,8 +365,6 @@ function FullscreenImage({ imageUrl, label, onClose }: { imageUrl: string; label
   );
 }
 
-// ── Dual-Camera Evidence Section ──────────────────────────────────────────────
-
 function DualCameraEvidence({
   imageUrlFront,
   imageUrlRear,
@@ -352,7 +378,6 @@ function DualCameraEvidence({
 }) {
   const [fullscreen, setFullscreen] = useState<{ url: string; label: string } | null>(null);
 
-  // Determine which cameras have images
   const front = imageUrlFront || (imageUrlLegacy && !imageUrlRear ? imageUrlLegacy : undefined);
   const rear  = imageUrlRear;
   const hasFront = Boolean(front);
@@ -366,7 +391,6 @@ function DualCameraEvidence({
   return (
     <>
       <div className="space-y-3">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Camera size={14} className="text-slate-400" />
@@ -379,7 +403,6 @@ function DualCameraEvidence({
           </span>
         </div>
 
-        {/* Camera grid — side by side when both present, full-width when one */}
         <div className={`grid gap-3 ${hasBoth ? "grid-cols-2" : "grid-cols-1"}`}>
           {hasFront && (
             <CameraThumb
@@ -432,21 +455,17 @@ function CameraThumb({
         alt={label}
         className="w-full h-36 object-cover transition-transform duration-500 group-hover:scale-105"
       />
-      {/* Hover overlay */}
       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
         <div className="bg-white/20 backdrop-blur-md rounded-full p-2.5 transform scale-90 group-hover:scale-100 transition-transform duration-300">
           <ZoomIn size={18} className="text-white" />
         </div>
       </div>
-      {/* Camera label badge */}
       <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1 text-[8px] text-white font-black tracking-widest flex items-center gap-1">
         <Camera size={8} />{label}
       </div>
     </div>
   );
 }
-
-// ── Quick View Modal ──────────────────────────────────────────────────────────
 
 function QuickViewModal({
   violation,
@@ -473,7 +492,6 @@ function QuickViewModal({
     <div className="fixed top-16 right-0 bottom-0 z-[2000] flex animate-in slide-in-from-right duration-300">
       <div className={`w-full max-w-[520px] h-full overflow-y-auto shadow-2xl border-l relative ${t(isDark, "bg-slate-900 border-slate-700", "bg-white border-slate-200")}`}>
 
-        {/* Sticky header */}
         <div className={`sticky top-0 z-20 shadow-sm border-b ${t(isDark, "bg-slate-900 border-slate-800", "bg-white border-slate-100")}`}>
           <div className="px-6 pt-6 pb-4 flex items-start justify-between">
             <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
@@ -514,7 +532,6 @@ function QuickViewModal({
 
         <div className="px-6 py-6 space-y-6 pb-20">
 
-          {/* Status row */}
           <div className={`flex items-center justify-between p-3 rounded-xl ${violation.status === "unverified"
             ? t(isDark, "bg-amber-500/10 border border-amber-500/20", "bg-amber-50 border border-amber-200")
             : violation.status === "verified"
@@ -529,7 +546,6 @@ function QuickViewModal({
             <p className="text-[10px] font-mono text-slate-400">ID: {violation.id.slice(0, 8)}...</p>
           </div>
 
-          {/* Metric card */}
           <div className={`p-5 rounded-2xl ${t(isDark, "bg-slate-800/40", "bg-gradient-to-br from-slate-50 to-slate-100/50")}`}>
             <div className="flex items-center justify-between mb-4">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.1em]">
@@ -590,7 +606,6 @@ function QuickViewModal({
             </div>
           </div>
 
-          {/* Location */}
           <div className={`p-5 rounded-2xl border-2 ${t(isDark, "border-slate-700/50 bg-slate-800/20", "border-slate-200/50 bg-gradient-to-br from-slate-50 to-white")}`}>
             <div className="flex items-center gap-3 mb-3">
               <div className={`p-2 rounded-xl ${t(isDark, "bg-blue-500/20", "bg-blue-100")}`}>
@@ -606,7 +621,6 @@ function QuickViewModal({
             </div>
           </div>
 
-          {/* ── Dual camera evidence (overcapacity only) ── */}
           {isOvercapacity && (
             <DualCameraEvidence
               imageUrlFront={violation.imageUrlFront}
@@ -616,7 +630,6 @@ function QuickViewModal({
             />
           )}
 
-          {/* Actions */}
           {violation.status === "unverified" && (
             <div className="space-y-3 pt-4 sticky bottom-0 bg-inherit pb-6">
               <button
@@ -672,32 +685,51 @@ export default function AdminDashboard() {
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("all");
+  // ── FIX 2: Default statusFilter to "unverified" so verified/dismissed items
+  //    don't linger in the sidebar after action ──────────────────────────────
+const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unverified");  
   const [typeFilter, setTypeFilter] = useState<ViolationType | "all">("all");
+
+  // ── FIX 1: Track which violation the map should fly to ───────────────────
+  const [mapFlyTarget, setMapFlyTarget] = useState<{ coords: [number, number]; id: string } | null>(null);
+
+  // ── Toast notification after verify ──────────────────────────────────────
+  const [verifyToast, setVerifyToast] = useState<{ plateNumber: string; id: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recentlyVerifiedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const loadViolations = useCallback(async () => {
+ const loadViolations = useCallback(async () => {
     setLoading(true);
     try {
-      const vData = await fetchAllViolations();
-      const uniqueViolations = vData.filter((v, index, self) => index === self.findIndex((t) => t.id === v.id));
-      const validViolations = uniqueViolations.filter(v =>
-        v.id && v.coordinates && v.coordinates.length === 2 &&
-        typeof v.coordinates[0] === 'number' && typeof v.coordinates[1] === 'number' &&
-        !isNaN(v.coordinates[0]) && !isNaN(v.coordinates[1])
-      );
+        const vData = await fetchAllViolations();
+        const uniqueViolations = vData.filter((v, index, self) => 
+            index === self.findIndex((t) => t.id === v.id)
+        );
+        const validViolations = uniqueViolations.filter(v =>
+            v.id && v.coordinates && v.coordinates.length === 2 &&
+            typeof v.coordinates[0] === 'number' && typeof v.coordinates[1] === 'number' &&
+            !isNaN(v.coordinates[0]) && !isNaN(v.coordinates[1])
+        );
 
-      const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
-      let finalViolations = validViolations;
-      if (user && !isSuperAdmin && user.operatorName) {
-        finalViolations = validViolations.filter(v => v.operator === user.operatorName);
-      }
+        // ADD THIS — keep recently verified items as "verified" even if DB returns old status
+        const correctedViolations = validViolations.map(v => 
+            recentlyVerifiedIds.current.has(v.id) 
+                ? { ...v, status: "verified" as const }
+                : v
+        );
 
-      setViolations(finalViolations);
+        const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
+        let finalViolations = correctedViolations; // CHANGE from validViolations to correctedViolations
+        if (user && !isSuperAdmin && user.operatorName) {
+            finalViolations = correctedViolations.filter(v => v.operator === user.operatorName);
+        }
+
+        setViolations(finalViolations);
 
       const vehicleResponse = await fetch("/api/vehicles");
       if (vehicleResponse.ok) {
@@ -747,17 +779,36 @@ export default function AdminDashboard() {
     overcapacity: violations.filter(v => v.type === "overcapacity").length,
   }), [violations]);
 
+  // ── FIX 2: After verify, close modal and the sidebar auto-hides it because
+  //    statusFilter defaults to "unverified" ─────────────────────────────────
+  const [isVerifying, setIsVerifying] = useState(false);
   const handleVerifyViolation = useCallback(async (id: string, type: ViolationType) => {
+    recentlyVerifiedIds.current.add(id); // ADD THIS
+    const target = violations.find(v => v.id === id);
     setViolations(prev => prev.map(v => v.id === id ? { ...v, status: "verified" } : v));
+    setSelectedViolation(null);
+    setMapFlyTarget(null);
     await updateViolationStatus(id, type, "verified");
-  }, []);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setVerifyToast({ plateNumber: target?.plateNumber || id.slice(0, 8), id });
+    toastTimerRef.current = setTimeout(() => setVerifyToast(null), 6000);
+    setTimeout(() => recentlyVerifiedIds.current.delete(id), 30000);
+}, [violations]);
 
   const handleDismissViolation = useCallback(async (id: string, type: ViolationType) => {
     setViolations(prev => prev.map(v => v.id === id ? { ...v, status: "dismissed" } : v));
+    setSelectedViolation(null);
+    setMapFlyTarget(null);
     await updateViolationStatus(id, type, "dismissed");
   }, []);
 
-  const clearFilters = () => { setSearchQuery(""); setStatusFilter("all"); setTypeFilter("all"); };
+  // ── FIX 1: Handler for sidebar card click — fly map AND open modal ────────
+  const handleSidebarViolationClick = useCallback((violation: Violation) => {
+    setSelectedViolation(violation);
+    setMapFlyTarget({ coords: violation.coordinates, id: violation.id });
+  }, []);
+
+  const clearFilters = () => { setSearchQuery(""); setStatusFilter("unverified"); setTypeFilter("all"); };
 
   const layerOptions: { id: MapLayerType; label: string; icon: any; badge?: string }[] = [
     { id: "streets", label: "Streets", icon: MapIcon },
@@ -811,7 +862,6 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Right side */}
         <div className="flex items-center gap-3">
           <button
             onClick={loadViolations}
@@ -898,14 +948,24 @@ export default function AdminDashboard() {
             )}
             <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }} zoomControl={false} attributionControl={true}>
               <MapLayerController layerType={mapLayer} />
-              {violations.map((v, index) => (
-                <ViolationMarker key={`${v.id}_${index}`} violation={v} onClick={() => setSelectedViolation(v)} />
+              {/* ── FIX 1: Inject the fly-to controller inside MapContainer ── */}
+              <MapFlyTo target={mapFlyTarget} />
+              {violations
+                .filter(v => v.status === "unverified")
+                .map((v, index) => (
+                <ViolationMarker
+                  key={`${v.id}_${index}`}
+                  violation={v}
+                  // ── FIX 1: Pass isSelected so the marker turns amber when chosen ──
+                  isSelected={mapFlyTarget?.id === v.id}
+                  onClick={() => handleSidebarViolationClick(v)}
+                />
               ))}
               <MapController center={mapCenter} zoom={mapZoom} />
             </MapContainer>
             <div className="absolute bottom-3 left-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-md p-2 border border-slate-200/50 dark:border-slate-700/50 z-[1000]">
               <div className="flex gap-3">
-                {[["#ef4444", "Speeding"], ["#3b82f6", "Overcapacity"], ["#22c55e", "Verified"]].map(([color, label]) => (
+                {[["#ef4444", "Speeding"], ["#3b82f6", "Overcapacity"], ["#22c55e", "Verified"], ["#f59e0b", "Selected"]].map(([color, label]) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
                     <span className="text-[9px] text-slate-600 dark:text-slate-400">{label}</span>
@@ -933,7 +993,7 @@ export default function AdminDashboard() {
                   className={`w-full pl-9 pr-3 py-2 text-xs rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-medium ${t(isDark, "bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500", "bg-slate-50 border-slate-200 text-slate-800 placeholder:text-slate-400")}`}
                 />
               </div>
-              {(searchQuery || statusFilter !== "all" || typeFilter !== "all") && (
+              {(searchQuery || statusFilter !== "unverified" || typeFilter !== "all") && (
                 <button onClick={clearFilters} className={`p-2 rounded-lg ${t(isDark, "hover:bg-slate-800 text-slate-400", "hover:bg-slate-100 text-slate-400")}`}>
                   <X size={12} />
                 </button>
@@ -972,27 +1032,37 @@ export default function AdminDashboard() {
               </div>
             ) : (
               filteredViolations.map((violation) => {
-                // Camera indicator for the list card
                 const hasFrontImg = Boolean(violation.imageUrlFront);
                 const hasRearImg = Boolean(violation.imageUrlRear);
                 const hasLegacyImg = Boolean(violation.imageUrl);
                 const cameraCount = (hasFrontImg ? 1 : 0) + (hasRearImg ? 1 : 0) + (!hasFrontImg && !hasRearImg && hasLegacyImg ? 1 : 0);
+                // ── FIX 1: Highlight the active sidebar card ──────────────
+                const isActive = mapFlyTarget?.id === violation.id;
 
                 return (
                   <div
                     key={violation.id}
-                    onClick={() => setSelectedViolation(violation)}
-                    className={`p-2.5 rounded-xl border cursor-pointer transition-all duration-200 ${t(isDark, "bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/70 hover:border-blue-500/50", "bg-blue-50/50 border-slate-200/60 hover:bg-blue-100/60 hover:border-blue-300/50 hover:shadow-md")}`}
+                    onClick={() => handleSidebarViolationClick(violation)}
+                    className={`p-2.5 rounded-xl border cursor-pointer transition-all duration-200 ${
+                      isActive
+                        ? t(isDark, "bg-amber-500/15 border-amber-500/50 shadow-sm shadow-amber-500/20", "bg-amber-50 border-amber-300 shadow-sm shadow-amber-200")
+                        : t(isDark, "bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/70 hover:border-blue-500/50", "bg-blue-50/50 border-slate-200/60 hover:bg-blue-100/60 hover:border-blue-300/50 hover:shadow-md")
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <div className={`p-1 rounded-lg ${violation.type === "overspeeding" ? t(isDark, "bg-red-500/20", "bg-red-100") : t(isDark, "bg-blue-500/20", "bg-blue-100")}`}>
                           {violation.type === "overspeeding" ? <Gauge size={10} className="text-red-500" /> : <Weight size={10} className="text-blue-500" />}
                         </div>
-                        <div>
-                          <p className={`font-bold text-sm ${t(isDark, "text-white", "text-slate-800")}`}>{violation.plateNumber}</p>
-                          <p className="text-[8px] text-slate-500">{violation.vehicleId}</p>
-                        </div>
+                    <div>
+                        <p className={`font-bold text-sm ${t(isDark, "text-white", "text-slate-800")}`}>{violation.plateNumber}</p>
+                        <p className="text-[8px] text-slate-500">{violation.vehicleId}</p>
+                        {violation.driverName && (
+                          <p className={`text-[8px] font-medium truncate max-w-[90px] ${t(isDark, "text-indigo-300", "text-indigo-600")}`}>
+                            {violation.driverName}
+                          </p>
+                        )}
+                      </div>
                       </div>
                       <div className="flex items-center gap-1 min-w-0 flex-1">
                         <MapPin size={8} className="text-slate-500 flex-shrink-0" />
@@ -1009,7 +1079,6 @@ export default function AdminDashboard() {
                           ? <span className="text-red-600 dark:text-red-400">{violation.speed} km/h</span>
                           : <span className="text-blue-600 dark:text-blue-400">{violation.passengerCount} pax</span>}
                       </div>
-                      {/* Camera count badge */}
                       {cameraCount > 0 && violation.type === "overcapacity" && (
                         <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-bold flex-shrink-0 ${t(isDark, "bg-slate-700 text-slate-300", "bg-slate-100 text-slate-600")}`}>
                           <Camera size={7} />
@@ -1059,11 +1128,72 @@ export default function AdminDashboard() {
         <QuickViewModal
           violation={selectedViolation}
           isDark={isDark}
-          onClose={() => setSelectedViolation(null)}
+          onClose={() => { setSelectedViolation(null); setMapFlyTarget(null); }}
           onVerify={handleVerifyViolation}
           onDismiss={handleDismissViolation}
         />
       )}
+
+      {/* ── Verify toast notification ──────────────────────────────────────── */}
+      {verifyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[4000] animate-in fade-in slide-in-from-bottom-4 duration-400 pointer-events-none">
+          <div className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl shadow-2xl border pointer-events-auto ${
+            t(isDark,
+              "bg-slate-900/95 border-emerald-500/30 shadow-emerald-500/10",
+              "bg-white border-emerald-200 shadow-emerald-100"
+            )
+          }`}>
+            {/* Icon */}
+            <div className="shrink-0 w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30">
+              <CheckCircle size={18} className="text-white" strokeWidth={2.5} />
+            </div>
+
+            {/* Text */}
+            <div className="flex flex-col min-w-0">
+              <p className={`text-xs font-black uppercase tracking-wider ${t(isDark, "text-white", "text-slate-800")}`}>
+                Violation Verified
+              </p>
+              <p className={`text-[10px] font-medium ${t(isDark, "text-slate-400", "text-slate-500")}`}>
+                <span className="font-bold text-emerald-500">{verifyToast.plateNumber}</span> has been confirmed and moved to Violations
+              </p>
+            </div>
+
+            {/* Link button */}
+            <button
+              onClick={() => { 
+              router.push(`/dashboard/violations?highlight=${verifyToast.id}`); 
+              setVerifyToast(null); }}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 ${
+                t(isDark,
+                  "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30",
+                  "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
+                )
+              }`}
+            >
+              View <ArrowRight size={11} />
+            </button>
+
+            {/* Dismiss */}
+            <button
+              onClick={() => setVerifyToast(null)}
+              className={`shrink-0 p-1.5 rounded-lg transition-colors ${t(isDark, "hover:bg-slate-800 text-slate-500", "hover:bg-slate-100 text-slate-400")}`}
+            >
+              <X size={13} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {/* Progress bar — drains over 6 s */}
+          <div className="mt-1.5 h-0.5 rounded-full overflow-hidden bg-slate-200/30 mx-2">
+            <div
+              className="h-full bg-emerald-500 rounded-full"
+              style={{ animation: "drain 6s linear forwards" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Keyframe for the progress drain */}
+      <style>{`@keyframes drain { from { width: 100%; } to { width: 0%; } }`}</style>
     </div>
   );
 }

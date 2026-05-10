@@ -2,8 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const includeConfirmed = searchParams.get('includeConfirmed') === 'true'
+
     const cookieStore = await cookies()
 
     const supabase = createServerClient(
@@ -19,20 +22,36 @@ export async function GET() {
     )
 
     // Fetch overcapacity violations
-    const { data: overcapacityViolations, error: capacityError } = await supabase
+    let capacityQuery = supabase
       .from('overcapacity_violations')
       .select('*')
       .order('detected_at', { ascending: false })
+
+    if (!includeConfirmed) {
+      capacityQuery = capacityQuery
+        .not('status', 'eq', 'CONFIRMED')
+        .not('status', 'eq', 'DISMISSED')
+    }
+
+    const { data: overcapacityViolations, error: capacityError } = await capacityQuery
 
     if (capacityError) {
       console.error('Supabase capacity error:', capacityError)
     }
 
     // Fetch overspeeding violations
-    const { data: overspeedingViolations, error: speedError } = await supabase
+    let speedQuery = supabase
       .from('overspeeding_violations')
       .select('*')
       .order('detected_at', { ascending: false })
+
+    if (!includeConfirmed) {
+      speedQuery = speedQuery
+        .not('status', 'eq', 'CONFIRMED')
+        .not('status', 'eq', 'DISMISSED')
+    }
+
+    const { data: overspeedingViolations, error: speedError } = await speedQuery
 
     if (speedError) {
       console.error('Supabase speed error:', speedError)
@@ -47,12 +66,12 @@ export async function GET() {
       ...speedArr.map(v => v.vehicle_id)
     ].filter(Boolean))]
 
-    // Fetch vehicle details — INCLUDE sitting_capacity and standing_capacity
+    // Fetch vehicle details
     let vehiclesMap = new Map()
     if (vehicleIds.length > 0) {
       const { data: vehicles } = await supabase
         .from('vehicle')
-        .select('vehicle_id, vehicle_code, plate_number, speed_limit, sitting_capacity, standing_capacity, route:route_id ( route_name ), operator:operator_id ( operator_name )')
+        .select('vehicle_id, vehicle_code, plate_number, speed_limit, sitting_capacity, standing_capacity, route:route_id ( route_name ), operator:operator_id ( operator_name ), driver:driver_id (driver_name)')
         .in('vehicle_id', vehicleIds)
 
       if (vehicles) {
@@ -60,7 +79,7 @@ export async function GET() {
       }
     }
 
-    // ── Transform overcapacity ────────────────────────────────────────────────
+    // Transform overcapacity
     const transformedCapacity = capacityArr.map(violation => {
       const vehicle = vehiclesMap.get(violation.vehicle_id)
 
@@ -79,7 +98,6 @@ export async function GET() {
           : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/violation-images/${violation.image_url}`
       }
 
-      // location JSONB: { latitude, longitude, street_name, barangay_name }
       const loc = violation.location && typeof violation.location === 'object' ? violation.location : {}
       const locationStr = [loc.street_name, loc.barangay_name].filter(Boolean).join(', ') || 'Mandaue City'
       const lat = parseFloat(loc.latitude)  || 10.3235
@@ -96,6 +114,7 @@ export async function GET() {
         operator_name: vehicle?.operator?.operator_name || 'Unknown Operator',
         location: locationStr,
         coordinates: [lat, lng],
+        driver_name: vehicle?.driver?.driver_name || "Unknown Driver",
         timestamp: violation.detected_at,
         passengerCount: totalPassengers,
         sitting_capacity: sittingCap,
@@ -106,7 +125,7 @@ export async function GET() {
       }
     })
 
-    // ── Transform overspeeding ────────────────────────────────────────────────
+    // Transform overspeeding
     const transformedSpeed = speedArr.map(violation => {
       const vehicle = vehiclesMap.get(violation.vehicle_id)
 
@@ -138,10 +157,11 @@ export async function GET() {
         location: locationStr,
         coordinates: [lat, lng],
         timestamp: violation.detected_at,
+        driver_name: vehicle?.driver?.driver_name || "Unknown Driver",
         speed_detected: speed,
         speed_limit: limit,
-        speed: Math.round(speed),      
-        speedLimit: limit,             
+        speed: Math.round(speed),
+        speedLimit: limit,
         speedExcess,
         imageUrl,
       }
