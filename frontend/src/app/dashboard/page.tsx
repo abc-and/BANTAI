@@ -143,6 +143,11 @@ async function fetchAllViolations(): Promise<Violation[]> {
           ? [row.coordinates[0], row.coordinates[1]]
           : [10.3235, 123.9222];
 
+        // Keep raw speed values as numbers (can be decimals)
+        const rawSpeed = row.speed ?? 0;
+        const rawSpeedLimit = row.speedLimit ?? 0;
+        const rawSpeedExcess = row.speedExcess ?? (rawSpeed - rawSpeedLimit);
+
         return {
           id: violationId,
           type: "overspeeding" as ViolationType,
@@ -153,10 +158,10 @@ async function fetchAllViolations(): Promise<Violation[]> {
           location: row.location || "Mandaue City",
           coordinates: coords,
           timestamp: row.detected_at ? new Date(row.detected_at) : new Date(),
-          speed: row.speed ?? 0,
+          speed: rawSpeed,
           driverName: row.driver_name || "Unknown Driver",
-          speedLimit: row.speedLimit ?? 0,
-          speedExcess: row.speedExcess ?? 0,
+          speedLimit: rawSpeedLimit,
+          speedExcess: rawSpeedExcess,
           imageUrl: row.imageUrl || row.image_url || undefined,
           operator: row.operator_name || null,
         };
@@ -179,7 +184,7 @@ async function updateViolationStatus(id: string, type: ViolationType, newStatus:
     body: JSON.stringify({ status: dbStatus, type }),
   });
   const data = await response.json();
-  console.log("PATCH response:", response.status, data); // ADD THIS
+  console.log("PATCH response:", response.status, data);
 }
 
 const ESRI_TRANSPORT_OVERLAY = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}";
@@ -209,7 +214,6 @@ const createCustomIcon = (color: string, isVerified = false) =>
 const overspeedingIcon = createCustomIcon("#ef4444");
 const overcapacityIcon = createCustomIcon("#3b82f6");
 const verifiedIcon = createCustomIcon("#22c55e", true);
-// Highlighted icon for selected sidebar item
 const selectedIcon = createCustomIcon("#f59e0b");
 
 const t = (isDark: boolean, dark: string, light: string) => isDark ? dark : light;
@@ -220,7 +224,6 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
   return null;
 }
 
-// ── FIX 1: New component that flies the map to a violation's coordinates ──────
 function MapFlyTo({ target }: { target: { coords: [number, number]; id: string } | null }) {
   const map = useMap();
   useEffect(() => {
@@ -257,7 +260,6 @@ function ViolationMarker({
   const lng = violation.coordinates[1];
   if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) return null;
 
-  // ── FIX 1: Use highlighted icon when this marker is the selected sidebar item ──
   const icon = isSelected
     ? selectedIcon
     : violation.status === "verified"
@@ -281,7 +283,7 @@ function ViolationMarker({
           </div>
           <div className="text-[10px] text-slate-500">
             {violation.type === "overspeeding"
-              ? `${violation.speed || 0} km/h (+${violation.speedExcess || 0})`
+              ? `${(violation.speed ?? 0).toFixed(2)} km/h (+${(violation.speedExcess ?? 0).toFixed(2)})`
               : `${violation.passengerCount || 0}/${violation.totalCapacity || 20} pax (+${violation.excessCount || 0})`}
           </div>
         </div>
@@ -299,7 +301,7 @@ function ViolationMarker({
           <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-100">
             <div className="flex items-center gap-1">
               {violation.type === "overspeeding"
-                ? <><Gauge size={12} className="text-red-500" /><span className="text-xs font-semibold text-red-600">{violation.speed || 0} km/h</span></>
+                ? <><Gauge size={12} className="text-red-500" /><span className="text-xs font-semibold text-red-600">{(violation.speed ?? 0).toFixed(2)} km/h</span></>
                 : <><Weight size={12} className="text-blue-500" /><span className="text-xs font-semibold text-blue-600">{violation.passengerCount || 0} pax</span></>}
             </div>
             <div className="flex items-center gap-1 text-slate-400 text-[9px]">
@@ -552,16 +554,16 @@ function QuickViewModal({
                 {isOvercapacity ? "PASSENGER COUNT" : "DETECTED SPEED"}
               </p>
               <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${excessPercent > 20 ? "bg-red-500/20 text-red-500" : "bg-orange-500/20 text-orange-500"}`}>
-                EXCESS: {isOvercapacity ? `+${violation.excessCount}` : `+${violation.speedExcess} km/h`}
+                EXCESS: {isOvercapacity ? `+${violation.excessCount}` : `+${(violation.speedExcess ?? 0).toFixed(2)} km/h`}
               </span>
             </div>
             <div className="space-y-3">
               <div className="flex items-baseline justify-center gap-2">
                 <span className={`text-5xl font-black ${t(isDark, "text-white", "text-slate-800")}`}>
-                  {isOvercapacity ? violation.passengerCount : violation.speed}
+                  {isOvercapacity ? violation.passengerCount : (violation.speed?.toFixed(2) ?? '0')}
                 </span>
                 <span className={`text-xl font-bold ${t(isDark, "text-slate-400", "text-slate-400")}`}>
-                  / {isOvercapacity ? violation.totalCapacity : `${violation.speedLimit} km/h`}
+                  / {isOvercapacity ? violation.totalCapacity : `${(violation.speedLimit ?? 0).toFixed(2)} km/h`}
                 </span>
               </div>
               <div className="space-y-1">
@@ -685,15 +687,11 @@ export default function AdminDashboard() {
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
-  // ── FIX 2: Default statusFilter to "unverified" so verified/dismissed items
-  //    don't linger in the sidebar after action ──────────────────────────────
-const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unverified");  
+  const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unverified");  
   const [typeFilter, setTypeFilter] = useState<ViolationType | "all">("all");
 
-  // ── FIX 1: Track which violation the map should fly to ───────────────────
   const [mapFlyTarget, setMapFlyTarget] = useState<{ coords: [number, number]; id: string } | null>(null);
 
-  // ── Toast notification after verify ──────────────────────────────────────
   const [verifyToast, setVerifyToast] = useState<{ plateNumber: string; id: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentlyVerifiedIds = useRef<Set<string>>(new Set());
@@ -716,7 +714,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
             !isNaN(v.coordinates[0]) && !isNaN(v.coordinates[1])
         );
 
-        // ADD THIS — keep recently verified items as "verified" even if DB returns old status
         const correctedViolations = validViolations.map(v => 
             recentlyVerifiedIds.current.has(v.id) 
                 ? { ...v, status: "verified" as const }
@@ -724,7 +721,7 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
         );
 
         const isSuperAdmin = user?.role === "SUPER_ADMIN" || user?.role === "SUPERADMIN";
-        let finalViolations = correctedViolations; // CHANGE from validViolations to correctedViolations
+        let finalViolations = correctedViolations;
         if (user && !isSuperAdmin && user.operatorName) {
             finalViolations = correctedViolations.filter(v => v.operator === user.operatorName);
         }
@@ -779,11 +776,9 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
     overcapacity: violations.filter(v => v.type === "overcapacity").length,
   }), [violations]);
 
-  // ── FIX 2: After verify, close modal and the sidebar auto-hides it because
-  //    statusFilter defaults to "unverified" ─────────────────────────────────
   const [isVerifying, setIsVerifying] = useState(false);
   const handleVerifyViolation = useCallback(async (id: string, type: ViolationType) => {
-    recentlyVerifiedIds.current.add(id); // ADD THIS
+    recentlyVerifiedIds.current.add(id);
     const target = violations.find(v => v.id === id);
     setViolations(prev => prev.map(v => v.id === id ? { ...v, status: "verified" } : v));
     setSelectedViolation(null);
@@ -802,7 +797,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
     await updateViolationStatus(id, type, "dismissed");
   }, []);
 
-  // ── FIX 1: Handler for sidebar card click — fly map AND open modal ────────
   const handleSidebarViolationClick = useCallback((violation: Violation) => {
     setSelectedViolation(violation);
     setMapFlyTarget({ coords: violation.coordinates, id: violation.id });
@@ -948,7 +942,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
             )}
             <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }} zoomControl={false} attributionControl={true}>
               <MapLayerController layerType={mapLayer} />
-              {/* ── FIX 1: Inject the fly-to controller inside MapContainer ── */}
               <MapFlyTo target={mapFlyTarget} />
               {violations
                 .filter(v => v.status === "unverified")
@@ -956,7 +949,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
                 <ViolationMarker
                   key={`${v.id}_${index}`}
                   violation={v}
-                  // ── FIX 1: Pass isSelected so the marker turns amber when chosen ──
                   isSelected={mapFlyTarget?.id === v.id}
                   onClick={() => handleSidebarViolationClick(v)}
                 />
@@ -1036,7 +1028,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
                 const hasRearImg = Boolean(violation.imageUrlRear);
                 const hasLegacyImg = Boolean(violation.imageUrl);
                 const cameraCount = (hasFrontImg ? 1 : 0) + (hasRearImg ? 1 : 0) + (!hasFrontImg && !hasRearImg && hasLegacyImg ? 1 : 0);
-                // ── FIX 1: Highlight the active sidebar card ──────────────
                 const isActive = mapFlyTarget?.id === violation.id;
 
                 return (
@@ -1076,7 +1067,7 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
                       </div>
                       <div className="text-[10px] font-bold flex-shrink-0">
                         {violation.type === "overspeeding"
-                          ? <span className="text-red-600 dark:text-red-400">{violation.speed} km/h</span>
+                          ? <span className="text-red-600 dark:text-red-400">{(violation.speed?.toFixed(2) ?? '0')} km/h</span>
                           : <span className="text-blue-600 dark:text-blue-400">{violation.passengerCount} pax</span>}
                       </div>
                       {cameraCount > 0 && violation.type === "overcapacity" && (
@@ -1134,7 +1125,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
         />
       )}
 
-      {/* ── Verify toast notification ──────────────────────────────────────── */}
       {verifyToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[4000] animate-in fade-in slide-in-from-bottom-4 duration-400 pointer-events-none">
           <div className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl shadow-2xl border pointer-events-auto ${
@@ -1143,12 +1133,9 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
               "bg-white border-emerald-200 shadow-emerald-100"
             )
           }`}>
-            {/* Icon */}
             <div className="shrink-0 w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30">
               <CheckCircle size={18} className="text-white" strokeWidth={2.5} />
             </div>
-
-            {/* Text */}
             <div className="flex flex-col min-w-0">
               <p className={`text-xs font-black uppercase tracking-wider ${t(isDark, "text-white", "text-slate-800")}`}>
                 Violation Verified
@@ -1157,8 +1144,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
                 <span className="font-bold text-emerald-500">{verifyToast.plateNumber}</span> has been confirmed and moved to Violations
               </p>
             </div>
-
-            {/* Link button */}
             <button
               onClick={() => { 
               router.push(`/dashboard/violations?highlight=${verifyToast.id}`); 
@@ -1172,8 +1157,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
             >
               View <ArrowRight size={11} />
             </button>
-
-            {/* Dismiss */}
             <button
               onClick={() => setVerifyToast(null)}
               className={`shrink-0 p-1.5 rounded-lg transition-colors ${t(isDark, "hover:bg-slate-800 text-slate-500", "hover:bg-slate-100 text-slate-400")}`}
@@ -1181,8 +1164,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
               <X size={13} strokeWidth={2.5} />
             </button>
           </div>
-
-          {/* Progress bar — drains over 6 s */}
           <div className="mt-1.5 h-0.5 rounded-full overflow-hidden bg-slate-200/30 mx-2">
             <div
               className="h-full bg-emerald-500 rounded-full"
@@ -1192,7 +1173,6 @@ const [statusFilter, setStatusFilter] = useState<ViolationStatus | "all">("unver
         </div>
       )}
 
-      {/* Keyframe for the progress drain */}
       <style>{`@keyframes drain { from { width: 100%; } to { width: 0%; } }`}</style>
     </div>
   );
